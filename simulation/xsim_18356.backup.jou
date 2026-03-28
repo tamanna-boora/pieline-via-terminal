@@ -1,0 +1,25 @@
+#-----------------------------------------------------------
+# xsim v2025.2 (64-bit)
+# SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+# IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+# SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+# Start of session at: Tue Mar 17 18:02:17 2026
+# Process ID         : 18356
+# Current directory  : C:/Users/Tamanna/Downloads/RISCV-lab/Pipeline_via_terminal/simulation
+# Command line       : xsim.exe -log stdout -mode tcl -source {xsim.dir/riscv_sim/xsim_script.tcl}
+# Log file           : C:/Users/Tamanna/Downloads/RISCV-lab/Pipeline_via_terminal/simulation/stdout
+# Journal file       : C:/Users/Tamanna/Downloads/RISCV-lab/Pipeline_via_terminal/simulation\xsim.jou
+# Running On         : LAPTOP-KRULI8EP
+# Platform           : Windows Server 2016 or Windows 10
+# Operating System   : 26200
+# Processor Detail   : 13th Gen Intel(R) Core(TM) i5-1335U
+# CPU Frequency      : 2496 MHz
+# CPU Physical cores : 10
+# CPU Logical cores  : 12
+# Host memory        : 16876 MB
+# Swap memory        : 6710 MB
+# Total Virtual      : 23587 MB
+# Available Virtual  : 3869 MB
+#-----------------------------------------------------------
+source xsim.dir/riscv_sim/xsim_script.tcl
+run -all
