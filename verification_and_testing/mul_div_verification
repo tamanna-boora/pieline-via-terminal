@@ -1,0 +1,124 @@
+tcl console output
+================================================
+   STARTING GOLDEN MODEL REGRESSION
+================================================
+
+[487000] PASS | A:0000000a B:00000005 | Count: 1
+[877000] PASS | A:00000064 B:00000007 | Count: 2
+[1267000] PASS | A:ffffff9c B:00000007 | Count: 3
+[1305000] SKIP | Division by Zero (A:00000032 / B:0)
+[1697000] PASS | A:80000000 B:ffffffff | Count: 4
+[2087000] PASS | A:ffffffff B:ffffffff | Count: 5
+[2477000] PASS | A:5626cf41 B:86417a0a | Count: 6
+[2867000] PASS | A:4469ad23 B:a85639df | Count: 7
+[3257000] PASS | A:66ae6e8d B:3f5b115b | Count: 8
+[3647000] PASS | A:46c1374e B:fda6ead5 | Count: 9
+[4037000] PASS | A:32e6ff68 B:1334c7d8 | Count: 10
+[4427000] PASS | A:2c9b67be B:250f5cab | Count: 11
+[4817000] PASS | A:48a8f2d6 B:ca27edad | Count: 12
+[5207000] PASS | A:445570a6 B:96c102c0 | Count: 13
+[5597000] PASS | A:95ef2701 B:d0ac8b76 | Count: 14
+[5987000] PASS | A:2e79cae2 B:cc5234c7 | Count: 15
+[6377000] PASS | A:b6bb56a0 B:761a93a6 | Count: 16
+[6767000] PASS | A:2e6b337d B:1f981a98 | Count: 17
+[7157000] PASS | A:4bf3dce1 B:258d59f4 | Count: 18
+[7547000] PASS | A:e230f6b3 B:a5999bb0 | Count: 19
+[7937000] PASS | A:055da02c B:18815b00 | Count: 20
+[8327000] PASS | A:5902f9fa B:a48edd81 | Count: 21
+[8717000] PASS | A:f423ed02 B:4b51f7ae | Count: 22
+[9107000] PASS | A:7c74d62a B:0e1f6598 | Count: 23
+[9497000] PASS | A:8fa576c4 B:9ccb8b4f | Count: 24
+[9887000] PASS | A:30b229ea B:7e6b373d | Count: 25
+INFO: [USF-XSim-96] XSim completed. Design snapshot 'tb_mul_div_behav' loaded.
+INFO: [USF-XSim-97] XSim simulation ran for 10000ns
+launch_simulation: Time (s): cpu = 00:00:02 ; elapsed = 00:00:07 . Memory (MB): peak = 3370.039 ; gain = 0.000
+update_compile_order -fileset sources_1
+run 500 us
+[10277000] PASS | A:313c372f B:69fb553b | Count: 26
+[10667000] PASS | A:63ae723e B:81972983 | Count: 27
+[11057000] PASS | A:f75e863f B:40660a2f | Count: 28
+[11447000] PASS | A:4c2a55f3 B:cf4ac365 | Count: 29
+[11837000] PASS | A:08cc196b B:9cb27ee3 | Count: 30
+[12227000] PASS | A:8ce49330 B:2c5528b1 | Count: 31
+[12617000] PASS | A:8707edba B:467c0429 | Count: 32
+[13007000] PASS | A:bec9c2d2 B:d1c0e12c | Count: 33
+[13397000] PASS | A:a2e0ac94 B:24047e19 | Count: 34
+[13787000] PASS | A:b46fc783 B:16fb223f | Count: 35
+[14177000] PASS | A:1a05f7b4 B:17551c0c | Count: 36
+[14567000] PASS | A:6c5101eb B:4eb137e3 | Count: 37
+[14957000] PASS | A:cf87cb5b B:c446e237 | Count: 38
+[15347000] PASS | A:a3bf9538 B:8c2108c8 | Count: 39
+[15737000] PASS | A:efd97e4e B:3f61dd8c | Count: 40
+[16127000] PASS | A:44042ada B:572e4977 | Count: 41
+[16517000] PASS | A:ec710c38 B:a75078b9 | Count: 42
+[16907000] PASS | A:4f81ce91 B:b2b04796 | Count: 43
+[17297000] PASS | A:7a58c628 B:79736691 | Count: 44
+[17687000] PASS | A:d85babac B:e17bf01c | Count: 45
+[18077000] PASS | A:da6694ab B:cd48dec9 | Count: 46
+[18467000] PASS | A:eb5e2500 B:57c72266 | Count: 47
+[18857000] PASS | A:2e195f7a B:ad323452 | Count: 48
+[19247000] PASS | A:af6f128b B:514051ef | Count: 49
+[19637000] PASS | A:a0a74695 B:f0add429 | Count: 50
+[20027000] PASS | A:7757f2d8 B:bb9ad68c | Count: 51
+[20417000] PASS | A:d6ae08ab B:58437374 | Count: 52
+[20807000] PASS | A:b00766f5 B:a0c5ff42 | Count: 53
+[21197000] PASS | A:7c874aa1 B:6293cf8b | Count: 54
+[21587000] PASS | A:c1fcb0cc B:8e4fbe87 | Count: 55
+[21977000] PASS | A:4594c5b4 B:278e3c65 | Count: 56
+[22367000] PASS | A:fc6254d6 B:4af1f78b | Count: 57
+[22757000] PASS | A:3c8fbd94 B:cba7b36f | Count: 58
+[23147000] PASS | A:d26af387 B:6f111e44 | Count: 59
+[23537000] PASS | A:c32f8f77 B:f4a49328 | Count: 60
+[23927000] PASS | A:0f4c6560 B:07e3b391 | Count: 61
+[24317000] PASS | A:9f04c8ff B:4cb46fcf | Count: 62
+[24707000] PASS | A:a6039579 B:6c9d0fbd | Count: 63
+[25097000] PASS | A:eadb5c16 B:d7690327 | Count: 64
+[25487000] PASS | A:6b38934e B:0c180d6f | Count: 65
+[25877000] PASS | A:12ad5881 B:c15deccb | Count: 66
+[26267000] PASS | A:94979a28 B:23b9c908 | Count: 67
+[26657000] PASS | A:e5313896 B:e75be50d | Count: 68
+[27047000] PASS | A:5ae17abc B:5d316143 | Count: 69
+[27437000] PASS | A:2b4df74f B:a6468604 | Count: 70
+[27827000] PASS | A:116e6e73 B:652b6d7a | Count: 71
+[28217000] PASS | A:694ef002 B:55c41be1 | Count: 72
+[28607000] PASS | A:e57c01b0 B:264d22a6 | Count: 73
+[28997000] PASS | A:5543e00e B:970fae51 | Count: 74
+[29387000] PASS | A:5d6ab195 B:73298fa9 | Count: 75
+[29777000] PASS | A:88ced1a7 B:5e03cf8c | Count: 76
+[30167000] PASS | A:599a2143 B:7100ef2e | Count: 77
+[30557000] PASS | A:9b05a633 B:bd1838fa | Count: 78
+[30947000] PASS | A:344e4935 B:32469f94 | Count: 79
+[31337000] PASS | A:5f08e919 B:b6077fad | Count: 80
+[31727000] PASS | A:a3d453a5 B:bc8af682 | Count: 81
+[32117000] PASS | A:5db80d7f B:0c2540e2 | Count: 82
+[32507000] PASS | A:c60989a7 B:fe9ab53d | Count: 83
+[32897000] PASS | A:b4280b8a B:e833860e | Count: 84
+[33287000] PASS | A:67558189 B:d75ecdb4 | Count: 85
+[33677000] PASS | A:6ad020e7 B:ab6c2bc5 | Count: 86
+[34067000] PASS | A:6d1dcdd1 B:12fc4be2 | Count: 87
+[34457000] PASS | A:92e5abd1 B:de31ffa3 | Count: 88
+[34847000] PASS | A:ac01c728 B:8be6a866 | Count: 89
+[35237000] PASS | A:550756a5 B:a8025e3c | Count: 90
+[35627000] PASS | A:8f562e72 B:19a58c61 | Count: 91
+[36017000] PASS | A:e95a1f80 B:601a305f | Count: 92
+[36407000] PASS | A:b005ca76 B:a1249679 | Count: 93
+[36797000] PASS | A:206cce75 B:8411f821 | Count: 94
+[37187000] PASS | A:50a37a9b B:9a1ffbfa | Count: 95
+[37577000] PASS | A:859c096f B:00d06b08 | Count: 96
+[37967000] PASS | A:5de5fcce B:a75a1d22 | Count: 97
+[38357000] PASS | A:8f8f0db8 B:2ceaff9e | Count: 98
+[38747000] PASS | A:12cdf147 B:51600a8b | Count: 99
+[39137000] PASS | A:adba5120 B:fbd7afaf | Count: 100
+[39527000] PASS | A:455f63e8 B:48b90854 | Count: 101
+[39917000] PASS | A:23d692e2 B:ad1dc02e | Count: 102
+[40307000] PASS | A:dd1decd8 B:95736954 | Count: 103
+[40697000] PASS | A:bf176be3 B:0c756484 | Count: 104
+[41087000] PASS | A:f760d597 B:877ad96c | Count: 105
+
+================================================
+   REGRESSION COMPLETE
+   TOTAL PASSED: 105
+   TOTAL FAILED: 0
+================================================
+
+$finish called at time : 41287 ns : File "C:/projvivado/mul_div/mul_div.srcs/sources_1/new/tb_mul_div.v" Line 342
