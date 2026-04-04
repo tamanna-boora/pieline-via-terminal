@@ -13,7 +13,7 @@ uint8_t image_buffer[NUM_PIXELS];
 
 extern const int8_t model_weights[NUM_CLASSES * NUM_PIXELS];
 const int32_t model_biases[10] = {
-    -1205, 3450, -890, 45, 1024, -300, 500, 210, -99, 880
+    -60, 121, -6, -53, 20, 106, -12, 74, -159, -20
 };
 
 uint8_t read_uart_byte() {
