@@ -12,7 +12,9 @@
 uint8_t image_buffer[NUM_PIXELS];
 
 extern const int8_t model_weights[NUM_CLASSES * NUM_PIXELS];
-extern const int32_t model_biases[NUM_CLASSES];
+const int32_t model_biases[10] = {
+    -1205, 3450, -890, 45, 1024, -300, 500, 210, -99, 880
+};
 
 uint8_t read_uart_byte() {
     while (UART_RX_READY == 0) {
