@@ -1,97 +1,180 @@
 `timescale 1ns / 1ps
 
-module mac_32 (
-    input  wire        clk,
-    input  wire        rst,       // Active-low, SYNCHRONOUS (matches mul_32)
-    input  wire        clear,     // Synchronous clear — flushes pipeline + acc
-    input  wire        enable,    // High when input (a, b) is valid
-    input  wire [31:0] a,
-    input  wire [31:0] b,
-    input  wire [2:0]  funct3,    // Signed/Unsigned control (same as mul_32)
-    output reg  [63:0] acc,       // 64-bit accumulator
-    output wire        acc_valid  // High when acc holds a valid accumulated result
+(* use_dsp = "yes" *)
+module mnist_mac_unit (
+    input clk,
+    input rst_n,
+    
+    input [31:0] pixels,
+    input [7:0] weight_addr,
+    input [3:0] neuron_id,
+    input mac_enable,
+    input mac_reset,
+    input classify,
+    
+    output [3:0] digit_out,
+    output valid_out
 );
 
-    // ----------------------------------------------------------------
-    // 1. Multiplier Instantiation (3-cycle pipeline)
-    // ----------------------------------------------------------------
-    wire [31:0] mul_low, mul_high;
-    wire [63:0] mul_result = {mul_high, mul_low};
-
-    optimal_mul_32 MULT_UNIT (
-        .clk   (clk),
-        .rst   (rst),
-        .a     (a),
-        .b     (b),
-        .funct3(funct3),
-        .low   (mul_low),
-        .high  (mul_high)
-    );
-
-    // ----------------------------------------------------------------
-    // 2. Pipeline registers — delay enable AND clear by 3 cycles
-    //
-    //   Cycle 0: a,b driven        → enable asserted
-    //   Cycle 1: Stage1 (a_reg)    → enable_pipe[0]
-    //   Cycle 2: Stage2 (prod_reg) → enable_pipe[1]
-    //   Cycle 3: Stage3 (final_out)→ enable_pipe[2] = valid_product
-    //
-    //   clear is pipelined identically so it arrives at the accumulator
-    //   at the same time as the last in-flight product — wiping acc
-    //   AFTER that product is consumed, not before.
-    // ----------------------------------------------------------------
-    reg [2:0] enable_pipe;
-    reg [2:0] clear_pipe;
-
+    (* ram_style = "block" *)
+    (* INIT_FILE = "mnist_weights_packed.mem" *)
+    reg signed [31:0] weight_rom [0:9][0:195];
+    
+    initial begin
+        $readmemh("mnist_weights_packed.mem", weight_rom);
+    end
+    
+    wire [7:0] pix0 = pixels[7:0];
+    wire [7:0] pix1 = pixels[15:8];
+    wire [7:0] pix2 = pixels[23:16];
+    wire [7:0] pix3 = pixels[31:24];
+    
+    reg signed [7:0] w0_s1, w1_s1, w2_s1, w3_s1;
+    reg [7:0] p0_s1, p1_s1, p2_s1, p3_s1;
+    reg [3:0] neuron_s1;
+    
     always @(posedge clk) begin
-        if (!rst) begin
-            enable_pipe <= 3'b000;
-            clear_pipe  <= 3'b000;
+        if (!rst_n) begin
+            w0_s1 <= 8'sd0;
+            w1_s1 <= 8'sd0;
+            w2_s1 <= 8'sd0;
+            w3_s1 <= 8'sd0;
+            p0_s1 <= 8'd0;
+            p1_s1 <= 8'd0;
+            p2_s1 <= 8'd0;
+            p3_s1 <= 8'd0;
+            neuron_s1 <= 4'd0;
+        end else if (mac_enable) begin
+            {w3_s1, w2_s1, w1_s1, w0_s1} <= weight_rom[neuron_id][weight_addr];
+            p0_s1 <= pix0;
+            p1_s1 <= pix1;
+            p2_s1 <= pix2;
+            p3_s1 <= pix3;
+            neuron_s1 <= neuron_id;
+        end
+    end
+    
+    wire signed [15:0] p0_ext = {8'b0, p0_s1};
+    wire signed [15:0] p1_ext = {8'b0, p1_s1};
+    wire signed [15:0] p2_ext = {8'b0, p2_s1};
+    wire signed [15:0] p3_ext = {8'b0, p3_s1};
+    
+    reg signed [23:0] prod0_s2, prod1_s2, prod2_s2, prod3_s2;
+    reg [3:0] neuron_s2;
+    
+    always @(posedge clk) begin
+        if (!rst_n) begin
+            prod0_s2 <= 24'sd0;
+            prod1_s2 <= 24'sd0;
+            prod2_s2 <= 24'sd0;
+            prod3_s2 <= 24'sd0;
+            neuron_s2 <= 4'd0;
+        end else if (mac_enable) begin
+            prod0_s2 <= w0_s1 * p0_ext;
+            prod1_s2 <= w1_s1 * p1_ext;
+            prod2_s2 <= w2_s1 * p2_ext;
+            prod3_s2 <= w3_s1 * p3_ext;
+            neuron_s2 <= neuron_s1;
+        end
+    end
+    
+    wire signed [24:0] sum_low = {prod0_s2[23], prod0_s2} + {prod1_s2[23], prod1_s2};
+    wire signed [24:0] sum_high = {prod2_s2[23], prod2_s2} + {prod3_s2[23], prod3_s2};
+    wire signed [25:0] sum_all = {sum_low[24], sum_low} + {sum_high[24], sum_high};
+    
+    reg signed [25:0] sum_s3;
+    reg [3:0] neuron_s3;
+    
+    always @(posedge clk) begin
+        if (!rst_n) begin
+            sum_s3 <= 26'sd0;
+            neuron_s3 <= 4'd0;
+        end else if (mac_enable) begin
+            sum_s3 <= sum_all;
+            neuron_s3 <= neuron_s2;
+        end
+    end
+    
+    reg signed [31:0] accumulator [0:9];
+    integer i;
+    
+    initial begin
+        for (i = 0; i < 10; i = i + 1) begin
+            accumulator[i] = 32'sd0;
+        end
+    end
+    
+    always @(posedge clk) begin
+        if (!rst_n || mac_reset) begin
+            for (i = 0; i < 10; i = i + 1) begin
+                accumulator[i] <= 32'sd0;
+            end
+        end else if (mac_enable) begin
+            accumulator[neuron_s3] <= accumulator[neuron_s3] + {{6{sum_s3[25]}}, sum_s3};
+        end
+    end
+    
+    reg [3:0] max_neuron_comb;
+    reg signed [31:0] max_activation_comb;
+    
+    always @(*) begin
+        max_neuron_comb = 4'd0;
+        max_activation_comb = accumulator[0];
+        
+        if (accumulator[1] > max_activation_comb) begin
+            max_neuron_comb = 4'd1;
+            max_activation_comb = accumulator[1];
+        end
+        if (accumulator[2] > max_activation_comb) begin
+            max_neuron_comb = 4'd2;
+            max_activation_comb = accumulator[2];
+        end
+        if (accumulator[3] > max_activation_comb) begin
+            max_neuron_comb = 4'd3;
+            max_activation_comb = accumulator[3];
+        end
+        if (accumulator[4] > max_activation_comb) begin
+            max_neuron_comb = 4'd4;
+            max_activation_comb = accumulator[4];
+        end
+        if (accumulator[5] > max_activation_comb) begin
+            max_neuron_comb = 4'd5;
+            max_activation_comb = accumulator[5];
+        end
+        if (accumulator[6] > max_activation_comb) begin
+            max_neuron_comb = 4'd6;
+            max_activation_comb = accumulator[6];
+        end
+        if (accumulator[7] > max_activation_comb) begin
+            max_neuron_comb = 4'd7;
+            max_activation_comb = accumulator[7];
+        end
+        if (accumulator[8] > max_activation_comb) begin
+            max_neuron_comb = 4'd8;
+            max_activation_comb = accumulator[8];
+        end
+        if (accumulator[9] > max_activation_comb) begin
+            max_neuron_comb = 4'd9;
+            max_activation_comb = accumulator[9];
+        end
+    end
+    
+    reg [3:0] digit_out_reg;
+    reg valid_out_reg;
+    
+    always @(posedge clk) begin
+        if (!rst_n) begin
+            digit_out_reg <= 4'd0;
+            valid_out_reg <= 1'b0;
+        end else if (classify) begin
+            digit_out_reg <= max_neuron_comb;
+            valid_out_reg <= 1'b1;
         end else begin
-            enable_pipe <= {enable_pipe[1:0], enable};
-            clear_pipe  <= {clear_pipe[1:0],  clear};
+            valid_out_reg <= 1'b0;
         end
     end
-
-    wire valid_product  = enable_pipe[2];
-    wire delayed_clear  = clear_pipe[2];   // arrives when pipeline is drained
-
-    // ----------------------------------------------------------------
-    // 3. Accumulation Logic
-    //
-    //   For signed funct3 (000, 001, 010): mul_result is a signed 64-bit
-    //   value stored in two's complement. Adding it directly to acc works
-    //   correctly in 64-bit two's complement arithmetic — no extra casting
-    //   needed as long as acc is also treated as signed by the consumer.
-    //
-    //   Priority: delayed_clear > valid_product
-    //   (clear wins so a new dot-product starts clean)
-    // ----------------------------------------------------------------
-    always @(posedge clk) begin
-        if (!rst) begin
-            acc <= 64'd0;
-        end else if (delayed_clear) begin
-            // Flush: pipeline is drained, safe to wipe accumulator
-            acc <= 64'd0;
-        end else if (valid_product) begin
-            acc <= acc + mul_result;
-        end
-    end
-
-    // ----------------------------------------------------------------
-    // 4. acc_valid flag
-    //   Useful for the layer above (e.g. MNIST inference controller)
-    //   to know when acc holds a meaningful result.
-    //   Goes high with the first valid product, stays high until clear.
-    // ----------------------------------------------------------------
-    reg acc_valid_reg;
-    always @(posedge clk) begin
-        if (!rst || delayed_clear) begin
-            acc_valid_reg <= 1'b0;
-        end else if (valid_product) begin
-            acc_valid_reg <= 1'b1;
-        end
-    end
-    assign acc_valid = acc_valid_reg;
+    
+    assign digit_out = digit_out_reg;
+    assign valid_out = valid_out_reg;
 
 endmodule
