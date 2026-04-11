@@ -6,7 +6,7 @@ module mnist_mac_unit (
     input rst_n,
     
     input [31:0] pixels,
-    input [7:0] weight_addr,
+    input [5:0] weight_addr,           // Changed from [7:0] to [5:0] (0-63 max)
     input [3:0] neuron_id,
     input mac_enable,
     input mac_reset,
@@ -18,7 +18,7 @@ module mnist_mac_unit (
 
     (* ram_style = "block" *)
     (* INIT_FILE = "mnist_weights_packed.mem" *)
-    reg signed [31:0] weight_rom [0:9][0:195];
+    reg signed [31:0] weight_rom [0:9][0:48];  // Changed from [0:195] to [0:48]
     
     initial begin
         $readmemh("mnist_weights_packed.mem", weight_rom);
@@ -173,6 +173,11 @@ module mnist_mac_unit (
             valid_out_reg <= 1'b0;
         end
     end
+    
+    assign digit_out = digit_out_reg;
+    assign valid_out = valid_out_reg;
+
+endmodule
     
     assign digit_out = digit_out_reg;
     assign valid_out = valid_out_reg;
