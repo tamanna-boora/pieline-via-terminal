@@ -1,31 +1,19 @@
-def read_weights_vh(filename):
-    weights = []
-    with open(filename, 'r') as f:
-        for line in f:
-            line = line.strip()
-            if line and not line.startswith('//'):
-                weights.append(int(line, 16))
-    return weights
+import numpy as np
 
-def pack_weights_to_mem(weights, output_filename):
-    if len(weights) != 7840:
-        print(f"WARNING: Expected 7840 weights, got {len(weights)}")
-    
-    with open(output_filename, 'w') as f:
-        f.write("// MNIST Quantized Weights - Packed Format\n")
-        f.write("// Each line: [W3][W2][W1][W0]\n\n")
-        
-        for i in range(0, len(weights), 4):
-            w0 = weights[i]
-            w1 = weights[i+1] if (i+1) < len(weights) else 0
-            w2 = weights[i+2] if (i+2) < len(weights) else 0
-            w3 = weights[i+3] if (i+3) < len(weights) else 0
+# Assume weights shape is [10, 196] (not [10, 784])
+weights = np.random.randint(-128, 128, (10, 196), dtype=np.int8)
+
+with open('mnist_weights_packed.mem', 'w') as f:
+    for neuron in range(10):
+        for addr in range(0, 196, 4):  # Only 0-48 (49 groups)
+            w0 = int(weights[neuron, addr])
+            w1 = int(weights[neuron, addr+1])
+            w2 = int(weights[neuron, addr+2])
+            w3 = int(weights[neuron, addr+3])
             
             packed = ((w3 & 0xFF) << 24) | ((w2 & 0xFF) << 16) | \
                      ((w1 & 0xFF) << 8) | (w0 & 0xFF)
+            
             f.write(f'{packed:08X}\n')
 
-weights = read_weights_vh('weights.vh')
-print(f"Read {len(weights)} weights")
-pack_weights_to_mem(weights, 'mnist_weights_packed.mem')
-print(f"✓ Generated mnist_weights_packed.mem")
+print(f"Generated mnist_weights_packed.mem with {10*49} lines (10 neurons × 49 groups)")
