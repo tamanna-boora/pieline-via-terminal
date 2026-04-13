@@ -6,7 +6,7 @@
 #define UART_TX_READY (*(volatile uint32_t*)0x4000000C)
 #define SEVEN_SEG_OUT (*(volatile uint32_t*)0x40000010)
 
-#define NUM_PIXELS 196
+#define NUM_PIXELS 784
 #define NUM_CLASSES 10
 
 uint8_t image_buffer[NUM_PIXELS];
