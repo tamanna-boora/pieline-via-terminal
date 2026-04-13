@@ -9,12 +9,54 @@ module instr_mem (
 	// Declare instruction memory array (word-addressable, 4 KB total)
 	(* ram_style = "block" *)
 	reg [31:0] imem [0:1023];
-
+    initial begin
+		$readmemh("imem.hex", imem);
+	end
 	// FPGA ROM initialization
 	// Initialize instruction memory from hex file (simulation / FPGA)
-	initial begin
-    	$readmemh("imem.hex", imem);
-	end
+/*	 integer i;  // ← DECLARE AT TOP OF INITIAL BLOCK
+     initial begin
+       
+        // LOAD instructions
+        imem[0]  = 32'h00002083;  // lw x1, 0(x0)
+        imem[1]  = 32'h00402103;  // lw x2, 4(x0)
+        imem[2]  = 32'h00802183;  // lw x3, 8(x0)
+        imem[3]  = 32'h00c02203;  // lw x4, 12(x0)
+        
+        // MUL operations
+        imem[4]  = 32'h02208233;  // mul x4, x4, x2
+        imem[5]  = 32'h02210233;  // mulh x4, x4, x2
+        imem[6]  = 32'h02211233;  // mulhsu x4, x4, x2
+        imem[7]  = 32'h02212233;  // mulhu x4, x4, x2
+        
+        // DIV operations ← THIS WILL NOW WORK!
+        imem[8]  = 32'h0230c633;  // div x12, x6, x2
+imem[9]  = 32'h02314633;  // divu x12, x6, x2
+imem[10] = 32'h02318633;  // rem x12, x6, x2
+imem[11] = 32'h0231c633;  // remu x12, x6, x2
+
+imem[12] = 32'h0231c733;  // div x14, x6, x3
+imem[13] = 32'h02320733;  // divu x14, x6, x3
+imem[14] = 32'h02324733;  // rem x14, x6, x3
+imem[15] = 32'h02328733;  // remu x14, x6, x3
+        
+        // More MUL
+        imem[16] = 32'h02208633;  // mul x12, x4, x2
+        imem[17] = 32'h02210633;  // mulh x12, x4, x2
+        imem[18] = 32'h02211633;  // mulhsu x12, x4, x2
+        imem[19] = 32'h02212633;  // mulhu x12, x4, x2
+        
+        // ADD IMMEDIATE
+        imem[20] = 32'h10000293;  // addi x5, x0, 256
+        imem[21] = 32'h10400313;  // addi x6, x0, 260
+        imem[22] = 32'h10800393;  // addi x7, x0, 264
+        
+        // PAD with NOPs
+        for (i = 23; i < 256; i = i + 1) begin  // ← FIXED: i = i + 1
+            imem[i] = 32'h00000013;  // nop
+        end
+        
+    end  // ← ADDED MISSING END*/
 
 	// Synchronous instruction fetch
 	// Use word-aligned PC (pc[11:2]) to index memory
