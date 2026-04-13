@@ -1,34 +1,69 @@
-// opcode.vh
-// Standard RISC-V and Custom Accelerator Opcode Definitions
+//OPCODE and parameter definitions
 
-`ifndef OPCODE_VH
-`define OPCODE_VH
+`define OPCODE      6:0
+`define FUNC3       14:12
+`define FUNC7       31:25
+`define SUBTYPE     30
+`define RD          11:7
+`define RS1         19:15
+`define RS2         24:20
 
-// --- Standard RISC-V Base Opcodes (opcode[6:0]) ---
-`define OPCODE_R_TYPE  7'b0110011  // Standard Register-Register ALU ops
-`define OPCODE_I_TYPE  7'b0010011  // Immediate ALU ops
-`define OPCODE_LOAD    7'b0000011  // Load from memory
-`define OPCODE_STORE   7'b0100011  // Store to memory
-`define OPCODE_BRANCH  7'b1100011  // Conditional branches
+localparam  [31: 0] NOP        = 32'h0000_0013;     // addi x0, x0, 0
 
-// --- Custom Edge AI Accelerator Opcode ---
-// Mapped to the RISC-V 'custom-0' instruction space
-`define OPCODE_CUSTOM  7'b0001011  
+// OPCODE, INST[6:0]
+localparam  [ 6: 0] LUI     = 7'b0110111,        // U-type
+                    JAL     = 7'b1101111,        // J-type
+                    JALR    = 7'b1100111,        // I-type
+                    BRANCH  = 7'b1100011,        // B-type
+                    LOAD    = 7'b0000011,        // I-type
+                    STORE   = 7'b0100011,        // S-type
+                    ARITHI  = 7'b0010011,        // I-type
+                    ARITHR  = 7'b0110011;        // R-type
 
-// --- funct3 Definitions (instr[14:12]) ---
-`define FUNCT3_ADD_SUB 3'b000
-`define FUNCT3_AND     3'b111
-`define FUNCT3_OR      3'b110
-`define FUNCT3_MUL     3'b000  // Used when funct7 is RV32M
+// FUNC3, INST[14:12], INST[6:0] = 7'b1100011
+localparam  [ 2: 0] BEQ     = 3'b000,
+                    BNE     = 3'b001,
+                    BLT     = 3'b100,
+                    BGE     = 3'b101,
+                    BLTU    = 3'b110,
+                    BGEU    = 3'b111;
 
-// --- funct7 Definitions (instr[31:25]) ---
-`define FUNCT7_STANDARD 7'b0000000 // Standard ALU (e.g., ADD)
-`define FUNCT7_SUB      7'b0100000 // Subtraction
-`define FUNCT7_RV32M    7'b0000001 // Triggers the MUL/DIV module
+// FUNC3, INST[14:12], INST[6:0] = 7'b0000011
+localparam  [ 2: 0] LB      = 3'b000,
+                    LH      = 3'b001,
+                    LW      = 3'b010,
+                    LBU     = 3'b100,
+                    LHU     = 3'b101;
 
-// --- Custom MAC funct3 Commands ---
-`define MAC_LOAD_WGHT   3'b000     // Load weights into MAC buffer
-`define MAC_DOT_PROD    3'b001     // Execute pipelined dot product
-`define MAC_READ_ACC    3'b010     // Read 32-bit accumulator result
+// FUNC3, INST[14:12], INST[6:0] = 7'b0100011
+localparam  [ 2: 0] SB      = 3'b000,
+                    SH      = 3'b001,
+                    SW      = 3'b010;
+                    
+// FUNC3, INST[14:12], INST[6:0] = 7'b0110011, 7'b0010011
+localparam  [ 2: 0] ADD     = 3'b000,    // inst[30] == 0: ADD, inst[31] == 1: SUB
+                    SLL     = 3'b001,
+                    SLT     = 3'b010,
+                    SLTU    = 3'b011,
+                    XOR     = 3'b100,
+                    SR      = 3'b101,    // inst[30] == 0: SRL, inst[31] == 1: SRA
+                    OR      = 3'b110,
+                    AND     = 3'b111;
 
-`endif
+// ---------------------------------------------------------------
+// M-Extension (funct7 = 7'b0000001, opcode = ARITHR = 7'b0110011)
+// ---------------------------------------------------------------
+localparam [6:0] MEXT_FUNCT7 = 7'b0000001;  // identifies M-extension
+
+// funct3 for MUL variants (INST[14:12])
+localparam [2:0] MUL    = 3'b000,   // lower 32 bits, signed×signed
+                 MULH   = 3'b001,   // upper 32 bits, signed×signed
+                 MULHSU = 3'b010,   // upper 32 bits, signed×unsigned
+                 MULHU  = 3'b011;   // upper 32 bits, unsigned×unsigned
+
+// funct3 for DIV/REM variants (INST[14:12])
+localparam [2:0] DIV    = 3'b100,   // signed divide
+                 DIVU   = 3'b101,   // unsigned divide
+                 REM    = 3'b110,   // signed remainder
+                 REMU   = 3'b111;   // unsigned remainder
+
