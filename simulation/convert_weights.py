@@ -8,25 +8,29 @@ def read_weights_vh(filename):
     return weights
 
 def pack_weights_to_mem(weights, output_filename):
-    if len(weights) != 7840:
-        print(f"WARNING: Expected 7840 weights, got {len(weights)}")
+    # Check if already packed (1960 values = 32-bit packed)
+    if len(weights) == 1960:
+        print(f"✓ Weights already in packed format (1960 × 32-bit values)")
+    elif len(weights) == 7840:
+        print(f"✓ Weights in unpacked format (7840 × 8-bit values) - repacking...")
+    else:
+        print(f"WARNING: Unexpected weight count {len(weights)}")
+        return False
     
     with open(output_filename, 'w') as f:
-        f.write("// MNIST Quantized Weights - Packed Format\n")
-        f.write("// Each line: [W3][W2][W1][W0]\n\n")
+        f.write("// MNIST Quantized Weights - 8-bit Signed Packed\n")
+        f.write("// Each line: 32-bit = [W3:W2:W1:W0]\n")
+        f.write("// 10 neurons × 196 weight groups = 1960 lines\n\n")
         
-        for i in range(0, len(weights), 4):
-            w0 = weights[i]
-            w1 = weights[i+1] if (i+1) < len(weights) else 0
-            w2 = weights[i+2] if (i+2) < len(weights) else 0
-            w3 = weights[i+3] if (i+3) < len(weights) else 0
-            
-            packed = ((w3 & 0xFF) << 24) | ((w2 & 0xFF) << 16) | \
-                     ((w1 & 0xFF) << 8) | (w0 & 0xFF)
-            f.write(f'{packed:08X}\n')
+        for packed_value in weights:
+            f.write(f'{packed_value:08X}\n')
+    
+    print(f"✓ Generated {output_filename} with {len(weights)} 32-bit packed values")
+    return True
 
+# Usage
 weights = read_weights_vh('weights.vh')
-print(f"Read {len(weights)} weights")
+print(f"Read {len(weights)} weights from weights.vh")
 pack_weights_to_mem(weights, 'mnist_weights_packed.mem')
-print(f"✓ Generated mnist_weights_packed.mem")
+
 
