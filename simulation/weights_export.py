@@ -6,19 +6,16 @@ mnist = tf.keras.datasets.mnist
 (x_train, y_train), (x_test, y_test) = mnist.load_data()
 
 print("2. Preprocessing Data...")
-# MNIST is 28x28. Our FPGA C code expects 14x14 (196 pixels) to save memory.
-# We downsample by taking the average of 2x2 blocks.
-x_train = x_train.reshape(-1, 14, 2, 14, 2).mean(axis=(2, 4))
-x_test = x_test.reshape(-1, 14, 2, 14, 2).mean(axis=(2, 4))
-
-# Flatten the images into a 1D array of 196 pixels and normalize (0 to 1)
-x_train = x_train.reshape(-1, 196) / 255.0
-x_test = x_test.reshape(-1, 196) / 255.0
+# We are using the full 28x28 resolution now (784 pixels).
+# Flatten the images into a 1D array of 784 pixels and normalize (0 to 1)
+x_train = x_train.reshape(-1, 784) / 255.0
+x_test = x_test.reshape(-1, 784) / 255.0
 
 print("3. Building the Neural Network...")
 # A simple 1-layer network that exactly matches our FPGA hardware math
+# Input shape is now 784 to match the full resolution image
 model = tf.keras.models.Sequential([
-    tf.keras.layers.Dense(10, input_shape=(196,), activation='softmax')
+    tf.keras.layers.Dense(10, input_shape=(784,), activation='softmax')
 ])
 
 model.compile(optimizer='adam',
@@ -33,7 +30,7 @@ print("5. Extracting and Quantizing Weights...")
 # Get the learned floating-point numbers
 weights, biases = model.layers[0].get_weights()
 
-# Transpose weights so they are grouped by class (10 classes, 196 weights each)
+# Transpose weights so they are grouped by class (10 classes, 784 weights each)
 weights = weights.T 
 
 # Convert floats to 8-bit integers (-128 to 127) for the FPGA MAC unit
@@ -45,7 +42,8 @@ print("6. Exporting Hardware Files...")
 # Export weights for the Verilog Memory (weights.vh)
 with open("weights.vh", "w") as f:
     for class_idx in range(10):
-        for pixel_idx in range(196):
+        # Loop now goes up to 784 for each class
+        for pixel_idx in range(784):
             val = int(quantized_weights[class_idx, pixel_idx])
             hex_val = f"{(val & 0xFF):02X}\n"
             f.write(hex_val)
