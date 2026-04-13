@@ -1,4 +1,5 @@
 `timescale 1ns/1ps
+
 module IF_ID
 #(
     parameter [31:0] RESET = 32'h0000_0000
@@ -13,12 +14,12 @@ module IF_ID
     input                   inst_mem_is_valid,
     input  [31:0]           inst_mem_read_data,
 
-    // ----------------------------- // Signals previously read from pipe  // -----------------------------
+    // Signals previously read from pipe
     input                   stall_read_i,
     input  [31:0]           inst_fetch_pc,
     input  [31:0]           instruction_i,
 
-    // -----------------------------    // WB-stage signals (passed in)    // -----------------------------
+    // WB-stage signals
     input                   wb_stall,
     input                   wb_alu_to_reg,
     input                   wb_mem_to_reg,
@@ -26,8 +27,9 @@ module IF_ID
     input  [31:0]           wb_result,
     input  [31:0]           wb_read_data,
 
-    // -----------------------------    // Instruction memory address info    // -----------------------------
+    // Instruction memory address info
     input  [1:0]            inst_mem_offset,
+
     output [31:0] execute_immediate_w,
     output        immediate_sel_w,
     output        alu_w,
@@ -44,70 +46,57 @@ module IF_ID
     output [4:0]  dest_reg_sel_w,
     output [2:0]  alu_operation_w,
     output        illegal_inst_w,
-    output [31:0] instruction_o
+    output [31:0] instruction_o,
+    output [31:0] id_ex_instruction_o,
+
+    // M-extension signals: separate MUL and DIV
+    output        is_mul_w,          // HIGH for MUL/MULH/MULHSU/MULHU
+    output        is_div_w           // HIGH for DIV/DIVU/REM/REMU
 );
 
-//////////////// Including OPCODES ////////////////////////////
 `include "opcode.vh"
-//////////////////////////////
-//////////////////////////////// LOCAL INTERNAL SIGNALS////////////////////////////////////////////////////////////
 
 reg  [31:0] immediate;
 reg         illegal_inst;
 
-////////////////////////////////////////////////////////////// IF stage////////////////////////////////////////////////////////////
-
-
-// TODO-1:
-// Implement IF-stage instruction selection.
-// - On stall_read_i = 1, insert a NOP
-// - Otherwise, pass instruction/data from instruction memory
+// ================================================================
+// IF stage: instruction selection
+// ================================================================
 assign instruction_o = stall_read_i ? NOP : inst_mem_read_data;
 
-////////////////////////////////////////////////////////////// Exception detection////////////////////////////////////////////////////////////
-
-// TODO-2:
-// Assert exception when:
-// - illegal instruction is detected
-// - instruction fetch is misaligned (inst_mem_offset != 2'b00)
+// ================================================================
+// Exception detection
+// ================================================================
 always @(posedge clk or negedge reset) begin
     if (!reset)
         exception <= 1'b0;
     else if (illegal_inst || inst_mem_offset != 2'b00)
         exception <= 1'b1;
 end
-////////////////////////////////////////////////////////////// ID stage: immediate generation///////////////////////////////////////////////////////////
 
-// Generate 32-bit immediates for:
-// JAL, JALR, BRANCH, LOAD, STORE, ARITH-I, LUI
-// For unsupported opcodes, set illegal_inst = 1
-//
-// Definitions:
-// - instruction_i[31] is the sign bit
-// - "Sign-extend" means: replicate instruction_i[31] to fill all unused MSBs
-// - The number of replicated bits is implied by the immediate bit ranges below
-// - All immediates must be exactly 32 bits wide
+// ================================================================
+// M-extension decode (combinational, done in ID stage)
+// Used to suppress ALU signal for M-extension instructions
+// ================================================================
+wire is_m_ext      = (instruction_i[`OPCODE] == ARITHR) &&
+                     (instruction_i[31:25] == MEXT_FUNCT7);
 
+wire [2:0] funct3_field = instruction_i[14:12];
+wire is_mul_decode = is_m_ext && (funct3_field[2] == 1'b0);
+wire is_div_decode = is_m_ext && (funct3_field[2] == 1'b1);
+
+// ================================================================
+// ID stage: immediate generation
+// ================================================================
 always @(*) begin
-	immediate	= 32'h0;
-	illegal_inst = 1'b0;
+    immediate    = 32'h0;
+    illegal_inst = 1'b0;
 
-	case (instruction_i[`OPCODE])
+    case (instruction_i[`OPCODE])
+        JALR  : immediate = {{20{instruction_i[31]}}, instruction_i[31:20]};
 
-    	// JALR:
-    	// Lower 12 bits  = instruction_i[31:20]
-    	// Upper 20 bits  = Sign-extend
-    	JALR  : immediate = {{20{instruction_i[31]}}, instruction_i[31:20]};
-
-    	// BRANCH:
-    	// immediate[12]   = instruction_i[31]   (sign bit)
-    	// immediate[11]   = instruction_i[7]
-    	// immediate[10:5] = instruction_i[30:25]
-    	// immediate[4:1]  = instruction_i[11:8]
-    	// immediate[0]	= 1'b0
-    	// immediate[31:13]= Sign-extend
-    	BRANCH: immediate = {
-            {19{instruction_i[31]}},  // sign extend
+        BRANCH: immediate = {
+            {19{instruction_i[31]}},
             instruction_i[31],
             instruction_i[7],
             instruction_i[30:25],
@@ -115,52 +104,26 @@ always @(*) begin
             1'b0
         };
 
-    	// LOAD:
-    	// Lower 12 bits  = instruction_i[31:20]
-    	// Upper 20 bits  = Sign-extend
-    	LOAD  : immediate = {{20{instruction_i[31]}}, instruction_i[31:20]};
+        LOAD  : immediate = {{20{instruction_i[31]}}, instruction_i[31:20]};
 
-    	// STORE:
-    	// Lower 5 bits   = instruction_i[11:7]
-    	// Next 7 bits	= instruction_i[31:25]
-    	// Upper 20 bits  = Sign-extend
-    	STORE : immediate =  {
+        STORE : immediate = {
             {20{instruction_i[31]}},
             instruction_i[31:25],
             instruction_i[11:7]
         };
-        
-    	// ARITH-I:
-    	// If FUNC3 is SLL or SR:
-    	//   immediate[4:0]  = instruction_i[24:20]
-    	//   immediate[31:5] = 0
-    	// Else:
-    	//   Lower 12 bits  = instruction_i[31:20]
-    	//   Upper 20 bits  = Sign-extend
-    	ARITHI: immediate =
-             	(instruction_i[`FUNC3] == SLL ||
-              	instruction_i[`FUNC3] == SR)
-             	? {27'b0, instruction_i[24:20]}   // shift immediate
-             	: {{20{instruction_i[31]}}, instruction_i[31:20]};
 
+        ARITHI: immediate =
+            (instruction_i[`FUNC3] == SLL ||
+             instruction_i[`FUNC3] == SR)
+            ? {27'b0, instruction_i[24:20]}
+            : {{20{instruction_i[31]}}, instruction_i[31:20]};
 
-    	// ARITH-R:
-    	// No immediate
-    	ARITHR: immediate = 32'h0;
+        // ARITHR and M-extension: no immediate needed
+        ARITHR: immediate = 32'h0;
 
-    	// LUI:
-    	// Upper 20 bits = instruction_i[31:12]
-    	// Lower 12 bits = 0
-    	LUI   : immediate = {instruction_i[31:12], 12'b0};
+        LUI   : immediate = {instruction_i[31:12], 12'b0};
 
-    	// JAL:
-    	// immediate[20]	= instruction_i[31]   (sign bit)
-    	// immediate[19:12] = instruction_i[19:12]
-    	// immediate[11]	= instruction_i[20]
-    	// immediate[10:1]  = instruction_i[30:21]
-    	// immediate[0] 	= 1'b0
-    	// immediate[31:21] = Sign-extend
-    	JAL   : immediate = {
+        JAL   : immediate = {
             {11{instruction_i[31]}},
             instruction_i[31],
             instruction_i[19:12],
@@ -169,70 +132,92 @@ always @(*) begin
             1'b0
         };
 
-    	default: illegal_inst = 1'b1;
-	endcase
+        default: illegal_inst = 1'b1;
+    endcase
 end
 
-////////////////////////////////////////////////////////////// ID → EX Register////////////////////////////////////////////////////////////
-
-// TODO-4:
-// Generate control signals based on opcode
-// alu, lui, jal, jalr, branch, mem_write, mem_to_reg, arithsubtype
-
+// ================================================================
+// ID → EX pipeline register instantiation
+// ================================================================
 id_ex_reg u_id_ex (
-	.clk        	(clk),
-	.reset_n    	(reset),
-	.stall_n    	(stall_read_i),
+    .clk        (clk),
+    .reset_n    (reset),
+    .stall_n    (stall_read_i),
 
-	// From ID
-	.immediate_i	(immediate),
-	.immediate_sel_i(
-    	(instruction_i[`OPCODE] == JALR)  ||(instruction_i[`OPCODE] == LOAD)  ||
-    	(instruction_i[`OPCODE] == ARITHI)
-	),
-	.alu_i      	((instruction_i[`OPCODE] == ARITHI) ||
-                       (instruction_i[`OPCODE] == ARITHR)),
-	.lui_i      	(instruction_i[`OPCODE] == LUI),
-	.jal_i      	(instruction_i[`OPCODE] == JAL),
-	.jalr_i     	(instruction_i[`OPCODE] == JALR),
-	.branch_i   	(instruction_i[`OPCODE] == BRANCH),
-	.mem_write_i	(instruction_i[`OPCODE] == STORE),
-	.mem_to_reg_i   (instruction_i[`OPCODE] == LOAD),
-	.arithsubtype_i (
-    	instruction_i[`SUBTYPE] &&
-    	!(instruction_i[`OPCODE] == ARITHI &&
-      	instruction_i[`FUNC3] == ADD)
-	),
-	.pc_i       	(inst_fetch_pc),
-	.src1_sel_i 	(instruction_i[`RS1]),
-	.src2_sel_i 	(instruction_i[`RS2]),
-	.dest_reg_sel_i (instruction_i[`RD]),
-	.alu_op_i   	(instruction_i[`FUNC3]),
-	.illegal_inst_i (illegal_inst),
+    // Immediate
+    .immediate_i    (immediate),
+    .immediate_sel_i(
+        (instruction_i[`OPCODE] == JALR)   ||
+        (instruction_i[`OPCODE] == LOAD)   ||
+        (instruction_i[`OPCODE] == ARITHI)
+    ),
 
-	// To EX (WIRES)
-	.execute_immediate_o (execute_immediate_w),
-	.immediate_sel_o 	(immediate_sel_w),
-	.alu_o           	(alu_w),
-	.lui_o           	(lui_w),
-	.jal_o           	(jal_w),
-	.jalr_o          	(jalr_w),
-	.branch_o        	(branch_w),
-	.mem_write_o     	(mem_write_w),
-	.mem_to_reg_o    	(mem_to_reg_w),
-	.arithsubtype_o  	(arithsubtype_w),
-	.pc_o            	(pc_w),
-	.src1_sel_o      	(src1_select_w),
-	.src2_sel_o      	(src2_select_w),
-	.dest_reg_sel_o  	(dest_reg_sel_w),
-	.alu_op_o        	(alu_operation_w),
-	.illegal_inst_o  	(illegal_inst_w)
+    // ALU: standard R-type and I-type arithmetic
+    // EXCLUDES M-extension (both MUL and DIV)
+    .alu_i(
+        (instruction_i[`OPCODE] == ARITHI) ||
+        (instruction_i[`OPCODE] == ARITHR && !is_m_ext)
+    ),
+
+    .lui_i      (instruction_i[`OPCODE] == LUI),
+    .jal_i      (instruction_i[`OPCODE] == JAL),
+    .jalr_i     (instruction_i[`OPCODE] == JALR),
+    .branch_i   (instruction_i[`OPCODE] == BRANCH),
+    .mem_write_i(instruction_i[`OPCODE] == STORE),
+    .mem_to_reg_i(instruction_i[`OPCODE] == LOAD),
+
+    // arithsubtype: bit 30 of instruction, suppress for M-ext
+    .arithsubtype_i(
+        instruction_i[`SUBTYPE] &&
+        !(instruction_i[`OPCODE] == ARITHI &&
+          instruction_i[`FUNC3] == ADD)   &&
+        !is_m_ext
+    ),
+
+    .pc_i           (inst_fetch_pc),
+    .src1_sel_i     (instruction_i[`RS1]),
+    .src2_sel_i     (instruction_i[`RS2]),
+    .dest_reg_sel_i (instruction_i[`RD]),
+    .alu_op_i       (instruction_i[`FUNC3]),
+    .illegal_inst_i (illegal_inst),
+
+    // Instruction and M-extension decode inputs
+    // Decode will happen INSIDE the pipeline register
+    .instruction_i  (instruction_o),
+
+    // Outputs to EX
+    .execute_immediate_o (execute_immediate_w),
+    .immediate_sel_o     (immediate_sel_w),
+    .alu_o               (alu_w),
+    .lui_o               (lui_w),
+    .jal_o               (jal_w),
+    .jalr_o              (jalr_w),
+    .branch_o            (branch_w),
+    .mem_write_o         (mem_write_w),
+    .mem_to_reg_o        (mem_to_reg_w),
+    .arithsubtype_o      (arithsubtype_w),
+    .pc_o                (pc_w),
+    .src1_sel_o          (src1_select_w),
+    .src2_sel_o          (src2_select_w),
+    .dest_reg_sel_o      (dest_reg_sel_w),
+    .alu_op_o            (alu_operation_w),
+    .illegal_inst_o      (illegal_inst_w),
+
+    // M-extension and instruction outputs
+    .is_mul_o            (is_mul_w),
+    .is_div_o            (is_div_w),
+    .instruction_o       (id_ex_instruction_o)
 );
+
 endmodule
 
 
-////////////////////////////////////////////////////////////// ID → EX register module////////////////////////////////////////////////////////////
-
+// ================================================================
+// id_ex_reg — M-extension decode happens INSIDE the register
+// ================================================================
+// ================================================================
+// id_ex_reg — M-extension decode happens INSIDE the register
+// ================================================================
 module id_ex_reg (
     input         clk,
     input         reset_n,
@@ -255,6 +240,7 @@ module id_ex_reg (
     input  [4:0]  dest_reg_sel_i,
     input  [2:0]  alu_op_i,
     input         illegal_inst_i,
+    input  [31:0] instruction_i,
 
     // Outputs to EX
     output reg [31:0] execute_immediate_o,
@@ -272,9 +258,35 @@ module id_ex_reg (
     output reg [4:0]  src2_sel_o,
     output reg [4:0]  dest_reg_sel_o,
     output reg [2:0]  alu_op_o,
-    output reg        illegal_inst_o
+    output reg        illegal_inst_o,
+    output reg        is_mul_o,
+    output reg        is_div_o,
+    output reg [31:0] instruction_o
 );
 
+`include "opcode.vh"
+
+// ================================================================
+// M-extension decode combinational logic (on instruction_i)
+// ================================================================
+wire is_m_ext_reg      = (instruction_i[`OPCODE] == ARITHR) &&
+                         (instruction_i[31:25] == MEXT_FUNCT7);
+
+wire [2:0] funct3_reg = instruction_i[14:12];
+
+// Explicit decode:
+// MUL: funct3[2]=0 means funct3 ∈ {000,001,010,011}
+// DIV: funct3[2]=1 means funct3 ∈ {100,101,110,111}
+wire is_mul_decode_reg = is_m_ext_reg && ~funct3_reg[2];  // funct3[2]==0
+wire is_div_decode_reg = is_m_ext_reg &&  funct3_reg[2];  // funct3[2]==1
+
+
+
+// ================================================================
+// Sequential logic: register all signals on clock edge
+// CRITICAL: M-extension decode (is_mul_o, is_div_o) updates ALWAYS
+// even during stalls, so the signals are properly latched
+// ================================================================
 always @(posedge clk or negedge reset_n) begin
     if (!reset_n) begin
         execute_immediate_o <= 32'h0;
@@ -289,12 +301,16 @@ always @(posedge clk or negedge reset_n) begin
         arithsubtype_o      <= 1'b0;
         pc_o                <= 32'h0;
         src1_sel_o          <= 5'h0;
-        src2_sel_o          <= 5'h0; 
+        src2_sel_o          <= 5'h0;
         dest_reg_sel_o      <= 5'h0;
         alu_op_o            <= 3'h0;
         illegal_inst_o      <= 1'b0;
+        is_mul_o            <= 1'b0;
+        is_div_o            <= 1'b0;
+        instruction_o       <= 32'h0;
     end
     else if (!stall_n) begin
+        // Normal path: update all control signals
         execute_immediate_o <= immediate_i;
         immediate_sel_o     <= immediate_sel_i;
         alu_o               <= alu_i;
@@ -311,6 +327,19 @@ always @(posedge clk or negedge reset_n) begin
         dest_reg_sel_o      <= dest_reg_sel_i;
         alu_op_o            <= alu_op_i;
         illegal_inst_o      <= illegal_inst_i;
+        instruction_o       <= instruction_i;
+        
+        // M-EXTENSION DECODE (always updated, even in normal path)
+        is_mul_o            <= is_mul_decode_reg;
+        is_div_o            <= is_div_decode_reg;
+    end
+    else begin
+        // STALL path: keep all control signals frozen
+        // BUT STILL UPDATE M-extension decode on instruction_i
+        // This ensures is_mul/is_div are properly set when instruction enters
+        is_mul_o            <= is_mul_decode_reg;
+        is_div_o            <= is_div_decode_reg;
+        // All other outputs remain unchanged (frozen during stall)
     end
 end
 
