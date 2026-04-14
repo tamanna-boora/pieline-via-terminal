@@ -13,6 +13,7 @@ CFLAGS  = -march=rv32im -mabi=ilp32
 
 
 #////Source for c code file ///////////////////////////
+SRC_MNIST     = mnist_inference.c
 SRC_ADDITION     = code_addition.c
 SRC_SORT     = code_sort.c
 SRC_NEGATIVE = code_negative.c
@@ -20,6 +21,7 @@ SRC_FIBONACCI = code_fibonacci.c
 SRC_XOR = code_xor.c
 SRC_TEST_MUL  = test_mul.c
 SRC_TEST_DIV  = test_div.c
+
 TARGET   = code.elf
 
 .PHONY: all clean
@@ -72,6 +74,13 @@ test_mul: $(SRC_TEST_MUL)
 
 test_div: $(SRC_TEST_DIV)
 	$(CC) -c  $(SRC_TEST_DIV) -o $(TARGET) $(CFLAGS)
+	$(OBJCOPY) -O binary $(TARGET) ./imem_dmem/imem.bin
+	$(OBJCOPY) -j .data -O binary $(TARGET) ./imem_dmem/dmem.bin
+	$(OBJDUMP) -d $(TARGET) > ./imem_dmem/code.dis
+	cd imem_dmem && python bin2hex.py
+
+mnist: $(SRC_MNIST)
+	$(CC) -c  $(SRC_MNIST) -o $(TARGET) $(CFLAGS)
 	$(OBJCOPY) -O binary $(TARGET) ./imem_dmem/imem.bin
 	$(OBJCOPY) -j .data -O binary $(TARGET) ./imem_dmem/dmem.bin
 	$(OBJDUMP) -d $(TARGET) > ./imem_dmem/code.dis
