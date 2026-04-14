@@ -21,6 +21,7 @@ SRC_FIBONACCI = code_fibonacci.c
 SRC_XOR = code_xor.c
 SRC_TEST_MUL  = test_mul.c
 SRC_TEST_DIV  = test_div.c
+SRC_TEST_UART = test_math_uart.c
 
 TARGET   = code.elf
 
@@ -77,10 +78,17 @@ test_div: $(SRC_TEST_DIV)
 	$(OBJCOPY) -O binary $(TARGET) ./imem_dmem/imem.bin
 	$(OBJCOPY) -j .data -O binary $(TARGET) ./imem_dmem/dmem.bin
 	$(OBJDUMP) -d $(TARGET) > ./imem_dmem/code.dis
-	cd imem_dmem && python bin2hex.py
+    cd imem_dmem && python bin2hex.py
 
 mnist: $(SRC_MNIST)
 	$(CC) -c  $(SRC_MNIST) -o $(TARGET) $(CFLAGS)
+	$(OBJCOPY) -O binary $(TARGET) ./imem_dmem/imem.bin
+	$(OBJCOPY) -j .data -O binary $(TARGET) ./imem_dmem/dmem.bin
+	$(OBJDUMP) -d $(TARGET) > ./imem_dmem/code.dis
+	cd imem_dmem && python bin2hex.py
+
+test_uart: $(SRC_TEST_UART)
+	$(CC) -c  $(SRC_TEST_UART) -o $(TARGET) $(CFLAGS)
 	$(OBJCOPY) -O binary $(TARGET) ./imem_dmem/imem.bin
 	$(OBJCOPY) -j .data -O binary $(TARGET) ./imem_dmem/dmem.bin
 	$(OBJDUMP) -d $(TARGET) > ./imem_dmem/code.dis
