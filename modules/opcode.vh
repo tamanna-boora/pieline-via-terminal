@@ -1,69 +1,23 @@
-//OPCODE and parameter definitions
+// opcode.vh
+// Standard RISC-V Base Opcodes and Custom TinyML Edge AI Extensions
 
-`define OPCODE      6:0
-`define FUNC3       14:12
-`define FUNC7       31:25
-`define SUBTYPE     30
-`define RD          11:7
-`define RS1         19:15
-`define RS2         24:20
+`ifndef OPCODE_VH
+`define OPCODE_VH
 
-localparam  [31: 0] NOP        = 32'h0000_0013;     // addi x0, x0, 0
+// --- Standard RISC-V Base Opcodes (opcode[6:0]) ---
+`define OPCODE_R_TYPE  7'b0110011  
+`define OPCODE_I_TYPE  7'b0010011  
+`define OPCODE_LOAD    7'b0000011  
+`define OPCODE_STORE   7'b0100011  
+`define OPCODE_BRANCH  7'b1100011  
 
-// OPCODE, INST[6:0]
-localparam  [ 6: 0] LUI     = 7'b0110111,        // U-type
-                    JAL     = 7'b1101111,        // J-type
-                    JALR    = 7'b1100111,        // I-type
-                    BRANCH  = 7'b1100011,        // B-type
-                    LOAD    = 7'b0000011,        // I-type
-                    STORE   = 7'b0100011,        // S-type
-                    ARITHI  = 7'b0010011,        // I-type
-                    ARITHR  = 7'b0110011;        // R-type
+// --- Custom Edge AI Accelerator Opcode ---
+// Mapped to the RISC-V 'custom-0' instruction space
+`define OPCODE_CUSTOM  7'b0001011  
 
-// FUNC3, INST[14:12], INST[6:0] = 7'b1100011
-localparam  [ 2: 0] BEQ     = 3'b000,
-                    BNE     = 3'b001,
-                    BLT     = 3'b100,
-                    BGE     = 3'b101,
-                    BLTU    = 3'b110,
-                    BGEU    = 3'b111;
+// --- Custom MAC funct3 Commands ---
+`define MAC_EN   3'b000     // Load weights and compute dot product
+`define MAC_RST  3'b001     // Flush the MAC pipeline and accumulator
+`define MAC_CLS  3'b010     // Trigger classification and valid flag
 
-// FUNC3, INST[14:12], INST[6:0] = 7'b0000011
-localparam  [ 2: 0] LB      = 3'b000,
-                    LH      = 3'b001,
-                    LW      = 3'b010,
-                    LBU     = 3'b100,
-                    LHU     = 3'b101;
-
-// FUNC3, INST[14:12], INST[6:0] = 7'b0100011
-localparam  [ 2: 0] SB      = 3'b000,
-                    SH      = 3'b001,
-                    SW      = 3'b010;
-                    
-// FUNC3, INST[14:12], INST[6:0] = 7'b0110011, 7'b0010011
-localparam  [ 2: 0] ADD     = 3'b000,    // inst[30] == 0: ADD, inst[31] == 1: SUB
-                    SLL     = 3'b001,
-                    SLT     = 3'b010,
-                    SLTU    = 3'b011,
-                    XOR     = 3'b100,
-                    SR      = 3'b101,    // inst[30] == 0: SRL, inst[31] == 1: SRA
-                    OR      = 3'b110,
-                    AND     = 3'b111;
-
-// ---------------------------------------------------------------
-// M-Extension (funct7 = 7'b0000001, opcode = ARITHR = 7'b0110011)
-// ---------------------------------------------------------------
-localparam [6:0] MEXT_FUNCT7 = 7'b0000001;  // identifies M-extension
-
-// funct3 for MUL variants (INST[14:12])
-localparam [2:0] MUL    = 3'b000,   // lower 32 bits, signed×signed
-                 MULH   = 3'b001,   // upper 32 bits, signed×signed
-                 MULHSU = 3'b010,   // upper 32 bits, signed×unsigned
-                 MULHU  = 3'b011;   // upper 32 bits, unsigned×unsigned
-
-// funct3 for DIV/REM variants (INST[14:12])
-localparam [2:0] DIV    = 3'b100,   // signed divide
-                 DIVU   = 3'b101,   // unsigned divide
-                 REM    = 3'b110,   // signed remainder
-                 REMU   = 3'b111;   // unsigned remainder
-
+`endif
