@@ -1,16 +1,15 @@
 `timescale 1ns / 1ps
-`include "opcode.vh"
 
 module top (
     input  wire clk,        // 100 MHz onboard clock
-    input  wire btnc,       // Physical reset button (active low)
+    input  wire btnc,       // Physical reset button (Pin D9, active high)
     output wire [15:0] led  // LD0-LD15
 );
 
     // ================================================================
-    // Reset Logic
+    // Reset Logic (Active-High Physical to Active-Low Internal)
     // ================================================================
-    wire reset_n = ~btnc;  // Direct connection (active low)
+    wire reset_n = ~btnc; 
 
     // ================================================================
     // Internal Wires
@@ -21,8 +20,7 @@ module top (
     wire        inst_mem_is_valid, dmem_write_valid, dmem_read_valid;
     wire        dmem_read_ready, dmem_write_ready, exception;
     wire [31:0] pc_out;
-    
-    // M-Extension signals (optional - if your pipe module has them)
+
     wire is_mul, is_div, mul_busy_o, div_busy_o;
     wire [31:0] result_o;
 
@@ -36,7 +34,7 @@ module top (
         if (!reset_n) begin
             clk_enable_counter <= 32'h0;
         end
-        else if (clk_enable_counter == 32'd8_333_333) begin  // 100M / (2 * 6Hz)
+        else if (clk_enable_counter == 32'd8_333_333) begin  
             clk_enable_counter <= 32'h0;
         end
         else begin
@@ -54,25 +52,19 @@ module top (
     assign dmem_read_valid   = 1'b1;
 
     // ================================================================
-    // LED Output
-    // ================================================================
-   
-    // ================================================================
     // Pipeline CPU Instantiation
     // ================================================================
     pipe pipe_u (
-        .clk(clk),              // 100MHz clock
-        .reset(reset_n),        // Active low
-        .stall(~clock_enable),  // Stall when clock_enable is LOW (6Hz visualization)
+        .clk(clk),              
+        .reset(reset_n),        
+        .stall(~clock_enable),  
         .exception(exception),
         .pc_out(pc_out),
 
-        // Instruction Memory Interface
         .inst_mem_is_valid(inst_mem_is_valid),
         .inst_mem_read_data(inst_mem_read_data),
         .inst_mem_address(inst_mem_address),
 
-        // Data Memory Interface
         .dmem_read_data_temp(dmem_read_data),
         .dmem_write_valid(dmem_write_valid),
         .dmem_read_valid(dmem_read_valid),
@@ -83,56 +75,60 @@ module top (
         .dmem_write_data(dmem_write_data),
         .dmem_write_byte(dmem_write_byte),
         
-        // M-Extension outputs (comment out if not in your pipe module)
         .is_mul(is_mul),
         .is_div(is_div),
         .mul_busy_o(mul_busy_o),
         .div_busy_o(div_busy_o),
         .result_o(result_o)
     );
+
+    // ================================================================
+    // LED Monitors
+    // ================================================================
     reg div_happened;
     reg mul_happened;
+    reg mac_happened; // New register to catch the AI spark
 
     always @(posedge clk or negedge reset_n) begin
         if (!reset_n) begin
             div_happened <= 1'b0;
             mul_happened <= 1'b0;
+            mac_happened <= 1'b0;
         end
         else begin
-            if (is_div) div_happened <= 1'b1; // Catch the DIV spark
-            if (is_mul) mul_happened <= 1'b1; // Catch the MUL spark
+            if (is_div) div_happened <= 1'b1;
+            if (is_mul) mul_happened <= 1'b1;
+            // Sniff the instruction wire to see if the custom opcode fired
+            if (inst_mem_read_data[6:0] == 7'b0001011) mac_happened <= 1'b1;
         end
     end
- assign led[15]    = exception;    // LD15: Error light
-    assign led[14]    = mul_happened; // LD14: Stays on if a MUL ever happened
-    assign led[13]    = div_happened; // LD13: Stays on if a DIV ever happened
-    assign led[12]    = clock_enable; // LD12: Heartbeat (will blink fast)
-    assign led[11:0]  = pc_out[13:2]; // LD11-0: Show the current PC (word address)
+
+    assign led[15]    = exception;    // Error light
+    assign led[14]    = mul_happened; // Standard MUL fired
+    assign led[13]    = div_happened; // Standard DIV fired
+    assign led[12]    = clock_enable; // Heartbeat
+    assign led[11]    = 1'b0;
+    assign led[10]    = mac_happened; // LD10: AI ACCELERATOR FIRED!
+    assign led[9:0]   = pc_out[11:2]; // Show the current PC
+
     // ================================================================
-    // Instruction Memory (IMEM) - CORRECTED INSTANTIATION
+    // Instruction & Data Memory Instantiations
     // ================================================================
     instr_mem IMEM (
         .clk(clk),
-        .pc(inst_mem_address[31:2]),      // ← Byte address from pipeline
-        .instr(inst_mem_read_data)  // ← 32-bit instruction output
+        .pc(inst_mem_address[31:2]),      
+        .instr(inst_mem_read_data)  
     );
 
-    // ================================================================
-    // Data Memory (DMEM) - CORRECTED INSTANTIATION
-    // ================================================================
     data_mem DMEM (
         .clk(clk),
-        
-        // Read port
-        .re(dmem_read_ready),       // ← Read enable
-        .raddr(dmem_read_address),  // ← Byte address
-        .rdata(dmem_read_data),     // ← 32-bit read data output
-        
-        // Write port
-        .we(dmem_write_ready),      // ← Write enable
-        .waddr(dmem_write_address), // ← Byte address
-        .wdata(dmem_write_data),    // ← 32-bit write data
-        .wstrb(dmem_write_byte)     // ← Byte write strobe [3:0]
+        .re(dmem_read_ready),       
+        .raddr(dmem_read_address),  
+        .rdata(dmem_read_data),     
+        .we(dmem_write_ready),      
+        .waddr(dmem_write_address), 
+        .wdata(dmem_write_data),    
+        .wstrb(dmem_write_byte)     
     );
 
 endmodule
