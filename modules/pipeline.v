@@ -17,7 +17,7 @@ module pipe
     input  [31:0]       dmem_read_data_temp,
     input               dmem_write_valid,
     input               dmem_read_valid,
-      output              is_mul,
+    output              is_mul,
     output              is_div,
     output              mul_busy_o,
     output              div_busy_o,
@@ -32,16 +32,13 @@ module pipe
 );
 
     // ================================================================
-    // DATA MEMORY WIRES
+    // WIRES (Data, IF/ID, Execute, WB)
     // ================================================================
     wire [31:0] dmem_read_data;
     wire  [1:0] dmem_read_offset;
     wire        inst_mem_is_ready;
     wire        dmem_read_valid_checker;
 
-    // ================================================================
-    // IF/ID WIRES
-    // ================================================================
     reg  [31:0] immediate;
     wire        immediate_sel;
     wire  [4:0] src1_select;
@@ -64,23 +61,14 @@ module pipe
     wire [31:0] reg_rdata1;
     reg  [31:0] regs [31:1];
 
-    // ================================================================
-    // PC WIRES
-    // ================================================================
     wire [31:0] pc;
     wire [31:0] inst_fetch_pc;
     reg  [31:0] fetch_pc;
 
-    // ================================================================
-    // STALL WIRES
-    // ================================================================
     wire wb_stall_first;
     wire wb_stall_second;
     wire wb_stall;
 
-    // ================================================================
-    // EXECUTE WIRES
-    // ================================================================
     wire [31:0] next_pc;
     wire [31:0] write_address;
     wire        branch_taken;
@@ -88,9 +76,6 @@ module pipe
     wire [31:0] alu_operand1;
     wire [31:0] alu_operand2;
 
-    // ================================================================
-    // WB/MEM WIRES
-    // ================================================================
     wire        wb_alu_to_reg;
     wire [31:0] wb_result;
     wire  [2:0] wb_alu_operation;
@@ -105,12 +90,17 @@ module pipe
     wire [31:0] wb_write_data;
     wire [31:0] wb_read_data;
 
-        // ================================================================
-    // M-EXTENSION WIRES
+    wire        cpu_stall_out;
+
     // ================================================================
-    wire        is_mul;         // HIGH for MUL/MULH/MULHSU/MULHU
-    wire        is_div;         // HIGH for DIV/DIVU/REM/REMU
-    wire        cpu_stall_out;  // HIGH while MUL (3 cycles) or DIV (34 cycles) busy
+    // TINYML MAC ACCELERATOR WIRES
+    // ================================================================
+    wire        mac_enable;
+    wire        mac_reset;
+    wire        classify;
+    wire [3:0]  digit_out;
+    wire        valid_out;
+    wire [31:0] final_wb_result; // Intercepts standard WB to inject MAC answer
 
     // ================================================================
     // MEMORY ASSIGNMENTS
@@ -128,104 +118,92 @@ module pipe
     // ================================================================
     // IF_ID INSTANTIATION
     // ================================================================
-wire [31:0] id_ex_instruction;  // ← ADD THIS WIRE
+    wire [31:0] id_ex_instruction;
 
-IF_ID IF_ID_stage (
-    .clk                (clk),
-    .reset              (reset),
-    .stall              (stall),
-    .exception          (exception),
+    IF_ID IF_ID_stage (
+        .clk                (clk),
+        .reset              (reset),
+        .stall              (stall),
+        .exception          (exception),
+        .inst_mem_is_valid  (inst_mem_is_valid),
+        .inst_mem_read_data (inst_mem_read_data),
+        .stall_read_i       (stall_read),
+        .inst_fetch_pc      (inst_fetch_pc),
+        .instruction_i      (instruction),
+        .wb_stall           (wb_stall),
+        .wb_alu_to_reg      (wb_alu_to_reg),
+        .wb_mem_to_reg      (wb_mem_to_reg),
+        .wb_dest_reg_sel    (wb_dest_reg_sel),
+        .wb_result          (final_wb_result), // Changed to route MUX result
+        .wb_read_data       (wb_read_data),
+        .inst_mem_offset    (inst_mem_address[1:0]),
+        .execute_immediate_w(execute_immediate),
+        .immediate_sel_w    (immediate_sel),
+        .alu_w              (alu),
+        .lui_w              (lui),
+        .jal_w              (jal),
+        .jalr_w             (jalr),
+        .branch_w           (branch),
+        .mem_write_w        (mem_write),
+        .mem_to_reg_w       (mem_to_reg),
+        .arithsubtype_w     (arithsubtype),
+        .pc_w               (pc),
+        .src1_select_w      (src1_select),
+        .src2_select_w      (src2_select),
+        .dest_reg_sel_w     (dest_reg_sel),
+        .alu_operation_w    (alu_operation),
+        .illegal_inst_w     (illegal_inst),
+        .instruction_o      (instruction),
+        .is_mul_w           (is_mul),
+        .is_div_w           (is_div),
+        .id_ex_instruction_o(id_ex_instruction)  
+    );
 
-    .inst_mem_is_valid  (inst_mem_is_valid),
-    .inst_mem_read_data (inst_mem_read_data),
-
-    .stall_read_i       (stall_read),
-    .inst_fetch_pc      (inst_fetch_pc),
-    .instruction_i      (instruction),
-
-    .wb_stall           (wb_stall),
-    .wb_alu_to_reg      (wb_alu_to_reg),
-    .wb_mem_to_reg      (wb_mem_to_reg),
-    .wb_dest_reg_sel    (wb_dest_reg_sel),
-    .wb_result          (wb_result),
-    .wb_read_data       (wb_read_data),
-
-    .inst_mem_offset    (inst_mem_address[1:0]),
-
-    .execute_immediate_w(execute_immediate),
-    .immediate_sel_w    (immediate_sel),
-    .alu_w              (alu),
-    .lui_w              (lui),
-    .jal_w              (jal),
-    .jalr_w             (jalr),
-    .branch_w           (branch),
-    .mem_write_w        (mem_write),
-    .mem_to_reg_w       (mem_to_reg),
-    .arithsubtype_w     (arithsubtype),
-    .pc_w               (pc),
-    .src1_select_w      (src1_select),
-    .src2_select_w      (src2_select),
-    .dest_reg_sel_w     (dest_reg_sel),
-    .alu_operation_w    (alu_operation),
-    .illegal_inst_w     (illegal_inst),
-    .instruction_o      (instruction),
-    .is_mul_w           (is_mul),
-    .is_div_w           (is_div),
-    .id_ex_instruction_o(id_ex_instruction)  // ← ADD THIS
-);
-
-
-           // ================================================================
-    // REGISTER FILE FORWARDING WITH DATA FORWARDING
     // ================================================================
-    // 3-stage pipeline forwarding paths:
-    // Priority 1: Forward from WB/MEM stage (most recent committed result)
-    // Priority 2: Read from register file
-    //
-    // This allows:
-    //   - LW/ALU result forwarding (WB stage)
-    //   - MUL/DIV result forwarding
-    //   - Dependent instructions to execute without stalls
-    //
-    // For LOAD instructions:
-    //   - LW enters EXECUTE, address calculated
-    //   - Data read from memory in WB stage
-    //   - wb_read_data_o available for forwarding
-    //   - Next instruction can use loaded value immediately
+    // MAC DECODER INSTANTIATION
     // ================================================================
+    decode decode_inst (
+        .instr      (id_ex_instruction),
+        .mac_enable (mac_enable),
+        .mac_reset  (mac_reset),
+        .classify   (classify)
+    );
 
-    // For src1 (rs1)
+    // ================================================================
+    // MAC UNIT INSTANTIATION
+    // ================================================================
+    mnist_mac_unit mac_unit_inst (
+        .clk         (clk),
+        .rst_n       (reset), 
+        .pixels      (reg_rdata1),            // 32-bit pixel bundle
+        .weight_addr (reg_rdata2[7:0]),       // Lower 8 bits of rs2
+        .neuron_id   (reg_rdata2[11:8]),      // Next 4 bits of rs2
+        .mac_enable  (mac_enable),
+        .mac_reset   (mac_reset),
+        .classify    (classify),
+        .digit_out   (digit_out),
+        .valid_out   (valid_out)
+    );
+
+    // THE WRITE-BACK MULTIPLEXER (Safe Integration)
+    assign final_wb_result = (valid_out) ? {28'd0, digit_out} : wb_result;
+
+    // ================================================================
+    // REGISTER FILE FORWARDING
+    // ================================================================
     assign reg_rdata1 =
         (src1_select == 5'd0) ? 32'd0 :
-        // Forward from WB/MEM stage (highest priority - most recent data)
-        (!wb_stall && wb_alu_to_reg && (wb_dest_reg_sel == src1_select))
-        ? (wb_mem_to_reg ? wb_read_data : wb_result)
-        // Read from register file (default)
-        : regs[src1_select];
+        (!wb_stall && wb_alu_to_reg && (wb_dest_reg_sel == src1_select)) ?
+        (wb_mem_to_reg ? wb_read_data : final_wb_result) : regs[src1_select];
 
-    // For src2 (rs2)
     assign reg_rdata2 =
         (src2_select == 5'd0) ? 32'd0 :
-        // Forward from WB/MEM stage (highest priority - most recent data)
-        (!wb_stall && wb_alu_to_reg && (wb_dest_reg_sel == src2_select))
-        ? (wb_mem_to_reg ? wb_read_data : wb_result)
-        // Read from register file (default)
-        : regs[src2_select];
-     // ================================================================
-    // REGISTER FILE WRITEBACK (Complete Logic)
-    // ================================================================
-    // Write-back to register file happens every cycle when:
-    // 1. wb_alu_to_reg is HIGH (instruction writes to register)
-    // 2. stall_read is LOW (pipeline not stalled)
-    // 3. wb_stall is LOW (WB stage not blocking)
-    //
-    // Select data source:
-    // - LOAD (wb_mem_to_reg=1): Use wb_read_data (from memory)
-    // - ALU/MUL/DIV (wb_mem_to_reg=0): Use wb_result (from execute)
-    //
-    // Register x0 is hardwired to 0 and never written
-    // ================================================================
+        (!wb_stall && wb_alu_to_reg && (wb_dest_reg_sel == src2_select)) ?
+        (wb_mem_to_reg ? wb_read_data : final_wb_result) : regs[src2_select];
 
+    // ================================================================
+    // REGISTER FILE WRITEBACK 
+    // ================================================================
     integer i;
     always @(posedge clk or negedge reset) begin
         if (!reset) begin
@@ -233,22 +211,18 @@ IF_ID IF_ID_stage (
                 regs[i] <= 32'd0;
         end
         else if (wb_alu_to_reg && !stall_read && !wb_stall) begin
-            // Only write to non-zero registers
             if (wb_dest_reg_sel != 5'd0) begin
-                // Select data source based on instruction type
                 if (wb_mem_to_reg)
-                    regs[wb_dest_reg_sel] <= wb_read_data;  // LOAD: from memory
+                    regs[wb_dest_reg_sel] <= wb_read_data;
                 else
-                    regs[wb_dest_reg_sel] <= wb_result;     // ALU/MUL/DIV: from execute
+                    regs[wb_dest_reg_sel] <= final_wb_result; // Routes MAC prediction
             end
         end
     end
 
     // ================================================================
-    // STALL REGISTER — INCLUDES M-EXTENSION STALL
+    // STALL REGISTER 
     // ================================================================
-    // stall_read controls the entire pipeline
-    // Set HIGH when: external stall OR MUL/DIV busy
     always @(posedge clk or negedge reset) begin
         if (!reset)
             stall_read <= 1'b1;
@@ -262,7 +236,6 @@ IF_ID IF_ID_stage (
     execute execute (
         .clk            (clk),
         .reset          (reset),
-
         .reg_rdata1     (reg_rdata1),
         .reg_rdata2     (reg_rdata2),
         .execute_imm    (execute_immediate),
@@ -281,18 +254,15 @@ IF_ID IF_ID_stage (
         .mem_write      (mem_write),
         .mem_to_reg     (mem_to_reg),
         .dest_reg_sel   (dest_reg_sel),
-
         .wb_branch_i    (wb_branch),
         .wb_branch_nxt_i(wb_branch_nxt),
-
         .alu_operand1   (alu_operand1),
         .alu_operand2   (alu_operand2),
         .write_address  (write_address),
         .branch_stall   (branch_stall),
         .next_pc        (next_pc),
         .branch_taken   (branch_taken),
-
-        .wb_result      (wb_result),
+        .wb_result      (wb_result), 
         .wb_mem_write   (wb_mem_write),
         .wb_alu_to_reg  (wb_alu_to_reg),
         .wb_dest_reg_sel(wb_dest_reg_sel),
@@ -301,8 +271,8 @@ IF_ID IF_ID_stage (
         .wb_mem_to_reg  (wb_mem_to_reg),
         .wb_read_address(wb_read_address),
         .mem_alu_operation(wb_alu_operation),
-        .ex_result_forward(ex_result_forward),
-                .is_mul         (is_mul),
+        .ex_result_forward(),
+        .is_mul         (is_mul),
         .is_div         (is_div),
         .cpu_stall_out  (cpu_stall_out)
     );
@@ -314,9 +284,7 @@ IF_ID IF_ID_stage (
         if (!reset)
             fetch_pc <= RESET;
         else if (!stall_read)
-            fetch_pc <= branch_stall
-                        ? fetch_pc + 4
-                        : next_pc;
+            fetch_pc <= branch_stall ? fetch_pc + 4 : next_pc;
     end
 
     // ================================================================
@@ -350,9 +318,9 @@ IF_ID IF_ID_stage (
     );
 
     assign pc_out = fetch_pc;
-     assign is_mul = is_mul;           // Already exists as internal wire
-    assign is_div = is_div;           // Already exists as internal wire
-    assign mul_busy_o = cpu_stall_out; // cpu_stall_out indicates MUL/DIV busy
-    assign div_busy_o = cpu_stall_out; // Same stall signal
-    assign result_o = wb_result;       // Result from WB stage
+    assign is_mul = is_mul;           
+    assign is_div = is_div;
+    assign mul_busy_o = cpu_stall_out;
+    assign div_busy_o = cpu_stall_out;
+    assign result_o = final_wb_result; // Output the MUXed result 
 endmodule
