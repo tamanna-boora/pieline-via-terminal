@@ -10,13 +10,13 @@ XVLOG = xvlog
 XELAB = xelab
 XSIM  = xsim
 
-.PHONY: help clean sort addition negative fibonacci xor
+.PHONY: help clean sort addition negative fibonacci xor mnist_inference test_mul test_div test_uart
 
 help:
 	@echo "Usage: make <program_name> (e.g. make addition)"
 
 # Generic Rule for all programs
-sort addition negative fibonacci xor:
+sort addition negative fibonacci xor mnist_inference test_mul test_div test_uart:
 	# 1. Generate Hex Files
 	$(MAKE) clean -C $(MEM_GEN)
 	$(MAKE) $@ -C $(MEM_GEN)
