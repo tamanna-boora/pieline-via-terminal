@@ -4,9 +4,10 @@ set_property IOSTANDARD LVCMOS33 [get_ports clk]
 create_clock -period 10.000 [get_ports clk]
 
 ################ RESET BUTTON (BTNC) ################
-set_property PACKAGE_PIN J15 [get_ports btnc]
+# Mapped to physical Pin D9 and removing the pullup 
+# because this board's button is active-high
+set_property PACKAGE_PIN D9 [get_ports btnc]
 set_property IOSTANDARD LVCMOS33 [get_ports btnc]
-set_property PULLUP true [get_ports btnc]
 
 ################ LEDS (15 LEDs - LD0 to LD14) #################
 # LEDs LD0-LD14 (we only use 15, not 16)
