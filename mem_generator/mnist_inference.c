@@ -9,9 +9,12 @@
 #define NUM_PIXELS 784
 #define NUM_CLASSES 10
 
-uint8_t image_buffer[NUM_PIXELS];
 
+__attribute__((aligned(4))) uint8_t image_buffer[NUM_PIXELS];
+
+// External weights array
 extern const int8_t model_weights[NUM_CLASSES * NUM_PIXELS];
+
 const int32_t model_biases[10] = {
     -60, 121, -6, -53, 20, 106, -12, 74, -159, -20
 };
@@ -28,12 +31,12 @@ void send_uart_byte(uint8_t data) {
     UART_TX_DATA = data;
 }
 
-static inline int32_t custom_mac(int32_t accumulator, int8_t pixel, int8_t weight) {
+static inline int32_t custom_mac(int32_t accumulator, uint32_t packed_pixels, uint32_t packed_weights) {
     int32_t result;
     asm volatile (
         ".insn r 0x0B, 0, 0, %0, %1, %2" 
         : "=r" (result) 
-        : "r" (pixel), "r" (weight)
+        : "r" (packed_pixels), "r" (packed_weights)
     );
     return result;
 }
@@ -47,13 +50,21 @@ int main() {
         int32_t max_score = -2147483648;
         uint8_t predicted_digit = 0;
 
+       
+        uint32_t* img_word_ptr = (uint32_t*)image_buffer;
+        uint32_t* weight_word_ptr = (uint32_t*)model_weights;
+
         for (int class_idx = 0; class_idx < NUM_CLASSES; class_idx++) {
             
             int32_t current_score = model_biases[class_idx];
             
-            for (int p_idx = 0; p_idx < NUM_PIXELS; p_idx++) {
-                int weight_index = (class_idx * NUM_PIXELS) + p_idx;
-                current_score = custom_mac(current_score, image_buffer[p_idx], model_weights[weight_index]);
+           
+            for (int w_idx = 0; w_idx < (NUM_PIXELS / 4); w_idx++) {
+                
+                int weight_index = (class_idx * (NUM_PIXELS / 4)) + w_idx;
+                
+               
+                current_score = custom_mac(current_score, img_word_ptr[w_idx], weight_word_ptr[weight_index]);
             }
 
             if (current_score > max_score) {
