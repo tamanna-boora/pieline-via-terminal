@@ -1,134 +1,115 @@
 `timescale 1ns / 1ps
 
 module top (
-    input  wire clk,        // 100 MHz onboard clock
-    input  wire btnc,       // Physical reset button (Pin D9, active high)
-    output wire [15:0] led  // LD0-LD15
+    input  wire clk,        // 100MHz Oscillator (Pin E3)
+    input  wire btnc,       // Center Button Reset (Pin N17)
+    output wire [15:0] led  // LEDs LD15 to LD0
 );
 
     // ================================================================
-    // Reset Logic (Active-High Physical to Active-Low Internal)
+    // 1. CLOCK DIVIDER (Slowed down for the Demo)
     // ================================================================
+    reg [31:0] clk_cnt = 0;
+    reg slow_clk_reg = 0;
+    
+    // CPU runs when button is RELEASED (Active-High Button -> Active-Low Reset)
     wire reset_n = ~btnc; 
 
-    // ================================================================
-    // Internal Wires
-    // ================================================================
-    wire [31:0] inst_mem_read_data, inst_mem_address;
-    wire [31:0] dmem_read_data, dmem_write_address, dmem_read_address, dmem_write_data;
-    wire [3:0]  dmem_write_byte;
-    wire        inst_mem_is_valid, dmem_write_valid, dmem_read_valid;
-    wire        dmem_read_ready, dmem_write_ready, exception;
-    wire [31:0] pc_out;
-
-    wire is_mul, is_div, mul_busy_o, div_busy_o;
-    wire [31:0] result_o;
-
-    // ================================================================
-    // Clock Divider (100 MHz to ~6 Hz for visualization)
-    // ================================================================
-    reg [31:0] clk_enable_counter;
-    wire clock_enable;
-    
-    always @(posedge clk or negedge reset_n) begin
-        if (!reset_n) begin
-            clk_enable_counter <= 32'h0;
-        end
-        else if (clk_enable_counter == 32'd8_333_333) begin  
-            clk_enable_counter <= 32'h0;
-        end
-        else begin
-            clk_enable_counter <= clk_enable_counter + 1;
+    always @(posedge clk) begin
+        if (btnc) begin
+            clk_cnt <= 0;
+            slow_clk_reg <= 0;
+        end else if (clk_cnt >= 50000000) begin // 10Hz: PC increments every 0.1s
+            clk_cnt <= 0;
+            slow_clk_reg <= ~slow_clk_reg;
+        end else begin
+            clk_cnt <= clk_cnt + 1;
         end
     end
-    
-    assign clock_enable = (clk_enable_counter == 32'h0);
+
+    wire cpu_clk = slow_clk_reg;
 
     // ================================================================
-    // Interface Constants
+    // 2. INTERNAL CPU SIGNALS
     // ================================================================
-    assign inst_mem_is_valid = 1'b1;
-    assign dmem_write_valid  = 1'b1;
-    assign dmem_read_valid   = 1'b1;
+    wire [31:0] imem_data, imem_addr, pc_out;
+    wire [31:0] dmem_rdata, dmem_waddr, dmem_raddr, dmem_wdata;
+    wire [3:0]  dmem_wstrb;
+    wire        dmem_re, dmem_we, exception, is_mul, is_div;
 
     // ================================================================
-    // Pipeline CPU Instantiation
+    // 3. PROCESSOR INSTANTIATION
     // ================================================================
     pipe pipe_u (
-        .clk(clk),              
-        .reset(reset_n),        
-        .stall(~clock_enable),  
+        .clk(cpu_clk),
+        .reset(reset_n),
+        .stall(1'b0),
         .exception(exception),
         .pc_out(pc_out),
-
-        .inst_mem_is_valid(inst_mem_is_valid),
-        .inst_mem_read_data(inst_mem_read_data),
-        .inst_mem_address(inst_mem_address),
-
-        .dmem_read_data_temp(dmem_read_data),
-        .dmem_write_valid(dmem_write_valid),
-        .dmem_read_valid(dmem_read_valid),
-        .dmem_write_ready(dmem_write_ready),
-        .dmem_read_ready(dmem_read_ready),
-        .dmem_write_address(dmem_write_address),
-        .dmem_read_address(dmem_read_address),
-        .dmem_write_data(dmem_write_data),
-        .dmem_write_byte(dmem_write_byte),
-        
+        .inst_mem_is_valid(1'b1),
+        .inst_mem_read_data(imem_data),
+        .inst_mem_address(imem_addr),
+        .dmem_read_data_temp(dmem_rdata),
+        .dmem_write_valid(1'b1),
+        .dmem_read_valid(1'b1),
+        .dmem_write_ready(dmem_we),
+        .dmem_read_ready(dmem_re),
+        .dmem_write_address(dmem_waddr),
+        .dmem_read_address(dmem_raddr),
+        .dmem_write_data(dmem_wdata),
+        .dmem_write_byte(dmem_wstrb),
         .is_mul(is_mul),
         .is_div(is_div),
-        .mul_busy_o(mul_busy_o),
-        .div_busy_o(div_busy_o),
-        .result_o(result_o)
+        .mul_busy_o(),
+        .div_busy_o(),
+        .result_o()
     );
 
     // ================================================================
-    // LED Monitors
+    // 4. AI INSTRUCTION MONITOR (MAC_RST / MAC_EN)
     // ================================================================
-    reg div_happened;
-    reg mul_happened;
-    reg mac_happened; // New register to catch the AI spark
-
-    always @(posedge clk or negedge reset_n) begin
+    reg mac_fired;
+    always @(posedge cpu_clk) begin
         if (!reset_n) begin
-            div_happened <= 1'b0;
-            mul_happened <= 1'b0;
-            mac_happened <= 1'b0;
-        end
-        else begin
-            if (is_div) div_happened <= 1'b1;
-            if (is_mul) mul_happened <= 1'b1;
-            // Sniff the instruction wire to see if the custom opcode fired
-            if (inst_mem_read_data[6:0] == 7'b0001011) mac_happened <= 1'b1;
+            mac_fired <= 1'b0;
+        end else if (imem_data[6:0] == 7'b0001011) begin 
+            // This matches instructions 13 and 14 in your imem.hex
+            mac_fired <= 1'b1;
         end
     end
 
-    assign led[15]    = exception;    // Error light
-    assign led[14]    = mul_happened; // Standard MUL fired
-    assign led[13]    = div_happened; // Standard DIV fired
-    assign led[12]    = clock_enable; // Heartbeat
-    assign led[11]    = 1'b0;
-    assign led[10]    = mac_happened; // LD10: AI ACCELERATOR FIRED!
-    assign led[9:0]   = pc_out[11:2]; // Show the current PC
+    // ================================================================
+    // 5. LED DIAGNOSTIC MAPPING
+    // ================================================================
+    assign led[15]    = exception;    // LD15: Illegal Instruction (Red)
+    assign led[12]    = cpu_clk;      // LD12: Pulse (Blinks while running)
+    assign led[11]    = 1'b1;         // LD11: Power Indicator
+    assign led[10]    = mac_fired;    // LD10: AI SUCCESS (MAC Activated)
+    assign led[13]    = is_mul;
+    assign led[14]    = is_div;
+    // PC Mapping: 
+    // pc_out[11:2] converts byte address (0, 4, 8...) to word index (0, 1, 2...)
+    // This will show your instructions 0-19 on LEDs 0-4
+    assign led[9:0]   = pc_out[11:2]; 
 
     // ================================================================
-    // Instruction & Data Memory Instantiations
+    // 6. MEMORY SYSTEM
     // ================================================================
     instr_mem IMEM (
-        .clk(clk),
-        .pc(inst_mem_address[31:2]),      
-        .instr(inst_mem_read_data)  
+        .clk(cpu_clk), 
+        .pc(imem_addr[11:2]), 
+        .instr(imem_data)
     );
 
     data_mem DMEM (
-        .clk(clk),
-        .re(dmem_read_ready),       
-        .raddr(dmem_read_address),  
-        .rdata(dmem_read_data),     
-        .we(dmem_write_ready),      
-        .waddr(dmem_write_address), 
-        .wdata(dmem_write_data),    
-        .wstrb(dmem_write_byte)     
+        .clk(cpu_clk), 
+        .re(dmem_re), 
+        .raddr(dmem_raddr), 
+        .rdata(dmem_rdata), 
+        .we(dmem_we), 
+        .waddr(dmem_waddr), 
+        .wdata(dmem_wdata), 
+        .wstrb(dmem_wstrb)
     );
 
 endmodule
