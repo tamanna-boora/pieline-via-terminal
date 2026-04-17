@@ -49,9 +49,9 @@ module IF_ID
     output [31:0] instruction_o,
     output [31:0] id_ex_instruction_o,
 
-    // M-extension signals: separate MUL and DIV
-    output        is_mul_w,          // HIGH for MUL/MULH/MULHSU/MULHU
-    output        is_div_w           // HIGH for DIV/DIVU/REM/REMU
+    // M-extension signals
+    output        is_mul_w,
+    output        is_div_w
 );
 
 `include "opcode.vh"
@@ -62,7 +62,7 @@ reg         illegal_inst;
 // ================================================================
 // IF stage: instruction selection
 // ================================================================
-assign instruction_o = stall_read_i ? NOP : inst_mem_read_data;
+assign instruction_o = stall_read_i ? `NOP : inst_mem_read_data;
 
 // ================================================================
 // Exception detection
@@ -75,11 +75,10 @@ always @(posedge clk or negedge reset) begin
 end
 
 // ================================================================
-// M-extension decode (combinational, done in ID stage)
-// Used to suppress ALU signal for M-extension instructions
+// M-extension decode
 // ================================================================
-wire is_m_ext      = (instruction_i[`OPCODE] == ARITHR) &&
-                     (instruction_i[31:25] == MEXT_FUNCT7);
+wire is_m_ext      = (instruction_i[`OPCODE] == `ARITHR) &&
+                     (instruction_i[31:25] == `MEXT_FUNCT7);
 
 wire [2:0] funct3_field = instruction_i[14:12];
 wire is_mul_decode = is_m_ext && (funct3_field[2] == 1'b0);
@@ -93,9 +92,9 @@ always @(*) begin
     illegal_inst = 1'b0;
 
     case (instruction_i[`OPCODE])
-        JALR  : immediate = {{20{instruction_i[31]}}, instruction_i[31:20]};
+        `JALR  : immediate = {{20{instruction_i[31]}}, instruction_i[31:20]};
 
-        BRANCH: immediate = {
+        `BRANCH: immediate = {
             {19{instruction_i[31]}},
             instruction_i[31],
             instruction_i[7],
@@ -104,26 +103,25 @@ always @(*) begin
             1'b0
         };
 
-        LOAD  : immediate = {{20{instruction_i[31]}}, instruction_i[31:20]};
+        `LOAD  : immediate = {{20{instruction_i[31]}}, instruction_i[31:20]};
 
-        STORE : immediate = {
+        `STORE : immediate = {
             {20{instruction_i[31]}},
             instruction_i[31:25],
             instruction_i[11:7]
         };
 
-        ARITHI: immediate =
-            (instruction_i[`FUNC3] == SLL ||
-             instruction_i[`FUNC3] == SR)
+        `ARITHI: immediate =
+            (instruction_i[`FUNC3] == `SLL ||
+             instruction_i[`FUNC3] == `SR)
             ? {27'b0, instruction_i[24:20]}
             : {{20{instruction_i[31]}}, instruction_i[31:20]};
 
-        // ARITHR and M-extension: no immediate needed
-        ARITHR: immediate = 32'h0;
+        `ARITHR: immediate = 32'h0;
 
-        LUI   : immediate = {instruction_i[31:12], 12'b0};
+        `LUI   : immediate = {instruction_i[31:12], 12'b0};
 
-        JAL   : immediate = {
+        `JAL   : immediate = {
             {11{instruction_i[31]}},
             instruction_i[31],
             instruction_i[19:12],
@@ -131,6 +129,8 @@ always @(*) begin
             instruction_i[30:21],
             1'b0
         };
+
+        `OPCODE_CUSTOM: immediate = 32'h0;
 
         default: illegal_inst = 1'b1;
     endcase
@@ -144,33 +144,29 @@ id_ex_reg u_id_ex (
     .reset_n    (reset),
     .stall_n    (stall_read_i),
 
-    // Immediate
     .immediate_i    (immediate),
     .immediate_sel_i(
-        (instruction_i[`OPCODE] == JALR)   ||
-        (instruction_i[`OPCODE] == LOAD)   ||
-        (instruction_i[`OPCODE] == ARITHI)
+        (instruction_i[`OPCODE] == `JALR)   ||
+        (instruction_i[`OPCODE] == `LOAD)   ||
+        (instruction_i[`OPCODE] == `ARITHI)
     ),
 
-    // ALU: standard R-type and I-type arithmetic
-    // EXCLUDES M-extension (both MUL and DIV)
     .alu_i(
-        (instruction_i[`OPCODE] == ARITHI) ||
-        (instruction_i[`OPCODE] == ARITHR && !is_m_ext)
+        (instruction_i[`OPCODE] == `ARITHI) ||
+        (instruction_i[`OPCODE] == `ARITHR && !is_m_ext)
     ),
 
-    .lui_i      (instruction_i[`OPCODE] == LUI),
-    .jal_i      (instruction_i[`OPCODE] == JAL),
-    .jalr_i     (instruction_i[`OPCODE] == JALR),
-    .branch_i   (instruction_i[`OPCODE] == BRANCH),
-    .mem_write_i(instruction_i[`OPCODE] == STORE),
-    .mem_to_reg_i(instruction_i[`OPCODE] == LOAD),
+    .lui_i       (instruction_i[`OPCODE] == `LUI),
+    .jal_i       (instruction_i[`OPCODE] == `JAL),
+    .jalr_i      (instruction_i[`OPCODE] == `JALR),
+    .branch_i    (instruction_i[`OPCODE] == `BRANCH),
+    .mem_write_i (instruction_i[`OPCODE] == `STORE),
+    .mem_to_reg_i(instruction_i[`OPCODE] == `LOAD),
 
-    // arithsubtype: bit 30 of instruction, suppress for M-ext
     .arithsubtype_i(
         instruction_i[`SUBTYPE] &&
-        !(instruction_i[`OPCODE] == ARITHI &&
-          instruction_i[`FUNC3] == ADD)   &&
+        !(instruction_i[`OPCODE] == `ARITHI &&
+          instruction_i[`FUNC3] == `ADD)   &&
         !is_m_ext
     ),
 
@@ -180,12 +176,8 @@ id_ex_reg u_id_ex (
     .dest_reg_sel_i (instruction_i[`RD]),
     .alu_op_i       (instruction_i[`FUNC3]),
     .illegal_inst_i (illegal_inst),
-
-    // Instruction and M-extension decode inputs
-    // Decode will happen INSIDE the pipeline register
     .instruction_i  (instruction_o),
 
-    // Outputs to EX
     .execute_immediate_o (execute_immediate_w),
     .immediate_sel_o     (immediate_sel_w),
     .alu_o               (alu_w),
@@ -203,7 +195,6 @@ id_ex_reg u_id_ex (
     .alu_op_o            (alu_operation_w),
     .illegal_inst_o      (illegal_inst_w),
 
-    // M-extension and instruction outputs
     .is_mul_o            (is_mul_w),
     .is_div_o            (is_div_w),
     .instruction_o       (id_ex_instruction_o)
@@ -211,19 +202,14 @@ id_ex_reg u_id_ex (
 
 endmodule
 
-
 // ================================================================
-// id_ex_reg — M-extension decode happens INSIDE the register
-// ================================================================
-// ================================================================
-// id_ex_reg — M-extension decode happens INSIDE the register
+// id_ex_reg
 // ================================================================
 module id_ex_reg (
     input         clk,
     input         reset_n,
     input         stall_n,
 
-    // Inputs from ID
     input  [31:0] immediate_i,
     input         immediate_sel_i,
     input         alu_i,
@@ -242,7 +228,6 @@ module id_ex_reg (
     input         illegal_inst_i,
     input  [31:0] instruction_i,
 
-    // Outputs to EX
     output reg [31:0] execute_immediate_o,
     output reg        immediate_sel_o,
     output reg        alu_o,
@@ -266,27 +251,14 @@ module id_ex_reg (
 
 `include "opcode.vh"
 
-// ================================================================
-// M-extension decode combinational logic (on instruction_i)
-// ================================================================
-wire is_m_ext_reg      = (instruction_i[`OPCODE] == ARITHR) &&
-                         (instruction_i[31:25] == MEXT_FUNCT7);
+wire is_m_ext_reg      = (instruction_i[`OPCODE] == `ARITHR) &&
+                         (instruction_i[31:25] == `MEXT_FUNCT7);
 
 wire [2:0] funct3_reg = instruction_i[14:12];
 
-// Explicit decode:
-// MUL: funct3[2]=0 means funct3 ∈ {000,001,010,011}
-// DIV: funct3[2]=1 means funct3 ∈ {100,101,110,111}
-wire is_mul_decode_reg = is_m_ext_reg && ~funct3_reg[2];  // funct3[2]==0
-wire is_div_decode_reg = is_m_ext_reg &&  funct3_reg[2];  // funct3[2]==1
+wire is_mul_decode_reg = is_m_ext_reg && ~funct3_reg[2]; 
+wire is_div_decode_reg = is_m_ext_reg &&  funct3_reg[2]; 
 
-
-
-// ================================================================
-// Sequential logic: register all signals on clock edge
-// CRITICAL: M-extension decode (is_mul_o, is_div_o) updates ALWAYS
-// even during stalls, so the signals are properly latched
-// ================================================================
 always @(posedge clk or negedge reset_n) begin
     if (!reset_n) begin
         execute_immediate_o <= 32'h0;
@@ -310,7 +282,6 @@ always @(posedge clk or negedge reset_n) begin
         instruction_o       <= 32'h0;
     end
     else if (!stall_n) begin
-        // Normal path: update all control signals
         execute_immediate_o <= immediate_i;
         immediate_sel_o     <= immediate_sel_i;
         alu_o               <= alu_i;
@@ -329,17 +300,12 @@ always @(posedge clk or negedge reset_n) begin
         illegal_inst_o      <= illegal_inst_i;
         instruction_o       <= instruction_i;
         
-        // M-EXTENSION DECODE (always updated, even in normal path)
         is_mul_o            <= is_mul_decode_reg;
         is_div_o            <= is_div_decode_reg;
     end
     else begin
-        // STALL path: keep all control signals frozen
-        // BUT STILL UPDATE M-extension decode on instruction_i
-        // This ensures is_mul/is_div are properly set when instruction enters
         is_mul_o            <= is_mul_decode_reg;
         is_div_o            <= is_div_decode_reg;
-        // All other outputs remain unchanged (frozen during stall)
     end
 end
 
