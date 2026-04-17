@@ -21,8 +21,7 @@ module uart_rx #(
     reg [13:0] timer;     
     reg [2:0]  bit_index; 
     
-    // --- STEP 1: Anti-Metastability (The "Double Flop") ---
-    // We pass the external rx_wire through two flip-flops to synchronize it.
+    // --- STEP 1: Anti-Metastability (Double Flop) ---
     reg rx_sync1, rx_sync2;
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -43,27 +42,28 @@ module uart_rx #(
             rx_done   <= 0;
             rx_data   <= 0;
         end else begin
-            rx_done <= 1'b0; // Default: No data ready
+            rx_done <= 1'b0; // Default pulse low
 
             case (state)
                 IDLE: begin
+                    timer <= 0;
+                    bit_index <= 0;
                     if (rx_sync2 == 1'b0) begin // Start bit detected
                         state <= START;
-                        timer <= 0;
                     end
                 end
 
                 START: begin
-                    if (timer == HALF_TICKS) begin
-                        // Double-check: Is it still low? (Glitch Filter)
-                        if (rx_sync2 == 1'b0) begin
-                            state <= DATA;
-                            timer <= 0;
-                            bit_index <= 0;
-                        end else begin
-                            state <= IDLE; // Was just noise
-                        end
+                    if (timer == TICKS_PER_BIT - 1) begin
+                        // We have finished the FULL start bit.
+                        // Now the timer is perfectly aligned with bit boundaries.
+                        state <= DATA;
+                        timer <= 0;
                     end else begin
+                        // Glitch Filter: Check at center if it's still low
+                        if (timer == HALF_TICKS && rx_sync2 != 1'b0) begin
+                            state <= IDLE;
+                        end
                         timer <= timer + 1'b1;
                     end
                 end
@@ -71,13 +71,16 @@ module uart_rx #(
                 DATA: begin
                     if (timer == TICKS_PER_BIT - 1) begin
                         timer <= 0;
-                        if (bit_index == 7)
+                        if (bit_index == 7) begin
                             state <= STOP;
-                        else
+                        end else begin
                             bit_index <= bit_index + 1'b1;
+                        end
                     end else begin
-                        if (timer == HALF_TICKS)          // Sample at center
+                        // THE GOLDEN RULE: Sample at exactly 50% of the bit duration
+                        if (timer == HALF_TICKS) begin
                             rx_data[bit_index] <= rx_sync2;
+                        end
                         timer <= timer + 1'b1;
                     end
                 end
@@ -86,9 +89,10 @@ module uart_rx #(
                     if (timer == TICKS_PER_BIT - 1) begin
                         timer <= 0;
                         state <= IDLE;
-                        if (rx_sync2 == 1'b1)   // Valid stop bit
+                        // Only signal done if the STOP bit is high (Valid Frame)
+                        if (rx_sync2 == 1'b1) begin
                             rx_done <= 1'b1;
-                        // else: could drive a `framing_error` output reg here
+                        end
                     end else begin
                         timer <= timer + 1'b1;
                     end
