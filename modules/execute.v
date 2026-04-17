@@ -80,7 +80,7 @@ assign write_address = alu_operand1 + execute_imm;
 assign branch_stall  = wb_branch_nxt_i || wb_branch_i;
 
 // ================================================================
-// MULTIPLIER — 3 stage pipeline (FIXED - DO NOT CHANGE)
+// MULTIPLIER - 3 stage pipeline (FIXED - DO NOT CHANGE)
 // Outputs mul_low/mul_high valid 3 cycles after inputs
 // ================================================================
 wire [31:0] mul_low, mul_high;
@@ -96,7 +96,7 @@ optimal_mul_32 MULT_UNIT (
 );
 
 // ================================================================
-// MUL STALL COUNTER — ACCOUNTS FOR 3-CYCLE LATENCY
+// MUL STALL COUNTER - ACCOUNTS FOR 3-CYCLE LATENCY
 //
 // MUL result (mul_low/mul_high) is valid 3 cycles AFTER input.
 // In our 3-stage pipeline:
@@ -116,7 +116,7 @@ always @(posedge clk or negedge reset) begin
         mul_stall_count <= 3'd0;
     end
     else if (is_mul && mul_stall_count == 3'd0 && !div_busy) begin
-        // New MUL instruction entering EXECUTE — start 3-cycle stall
+        // New MUL instruction entering EXECUTE - start 3-cycle stall
         mul_stall_count <= 3'd3;
     end
     else if (mul_stall_count > 3'd0) begin
@@ -127,7 +127,7 @@ end
 assign mul_busy = (mul_stall_count > 3'd0);
 
 // ================================================================
-// DIVIDER — 34 cycle FSM
+// DIVIDER - 34 cycle FSM
 // ================================================================
 wire [31:0] div_q, div_r;
 
@@ -150,7 +150,7 @@ optimal_div_32 DIV_UNIT (
 );
 
 // ================================================================
-// COMBINED STALL — either MUL or DIV is busy
+// COMBINED STALL - either MUL or DIV is busy
 // ================================================================
 assign cpu_stall_out = mul_busy | div_busy;
 
@@ -173,32 +173,32 @@ always @(*) begin
 
         branch: begin
             case (alu_op)
-                BEQ: begin
+                `BEQ: begin
                     next_pc = (ex_result_subs == 0)
                               ? pc + execute_imm : fetch_pc + 4;
                     if (ex_result_subs != 0) branch_taken = 1'b0;
                 end
-                BNE: begin
+                `BNE: begin
                     next_pc = (ex_result_subs != 0)
                               ? pc + execute_imm : fetch_pc + 4;
                     if (ex_result_subs == 0) branch_taken = 1'b0;
                 end
-                BLT: begin
+                `BLT: begin
                     next_pc = ex_result_subs[32]
                               ? pc + execute_imm : fetch_pc + 4;
                     if (!ex_result_subs[32]) branch_taken = 1'b0;
                 end
-                BGE: begin
+                `BGE: begin
                     next_pc = (!ex_result_subs[32])
                               ? pc + execute_imm : fetch_pc + 4;
                     if (ex_result_subs[32]) branch_taken = 1'b0;
                 end
-                BLTU: begin
+                `BLTU: begin
                     next_pc = ex_result_subu[32]
                               ? pc + execute_imm : fetch_pc + 4;
                     if (!ex_result_subu[32]) branch_taken = 1'b0;
                 end
-                BGEU: begin
+                `BGEU: begin
                     next_pc = (!ex_result_subu[32])
                               ? pc + execute_imm : fetch_pc + 4;
                     if (ex_result_subu[32]) branch_taken = 1'b0;
@@ -223,7 +223,7 @@ end
 always @(*) begin
     case (1'b1)
 
-        // MUL operations — checked FIRST
+        // MUL operations - checked FIRST
         is_mul: begin
             case (alu_op)
                 3'b000,          // MUL
@@ -236,7 +236,7 @@ always @(*) begin
             endcase
         end
 
-        // DIV operations — checked SECOND
+        // DIV operations - checked SECOND
         is_div: begin
             case (alu_op)
                 3'b100,          // DIV
@@ -256,18 +256,18 @@ always @(*) begin
 
         alu: begin
             case (alu_op)
-                ADD : ex_result = arithsubtype
+                `ADD : ex_result = arithsubtype
                                   ? alu_operand1 - alu_operand2
                                   : alu_operand1 + alu_operand2;
-                SLL : ex_result = alu_operand1 << alu_operand2[4:0];
-                SLT : ex_result = ex_result_subs[32];
-                SLTU: ex_result = {31'b0, ex_result_subu[32]};
-                XOR : ex_result = alu_operand1 ^ alu_operand2;
-                SR  : ex_result = arithsubtype
+                `SLL : ex_result = alu_operand1 << alu_operand2[4:0];
+                `SLT : ex_result = ex_result_subs[32];
+                `SLTU: ex_result = {31'b0, ex_result_subu[32]};
+                `XOR : ex_result = alu_operand1 ^ alu_operand2;
+                `SR  : ex_result = arithsubtype
                                   ? $signed(alu_operand1) >>> alu_operand2[4:0]
                                   : alu_operand1 >> alu_operand2[4:0];
-                OR  : ex_result = alu_operand1 | alu_operand2;
-                AND : ex_result = alu_operand1 & alu_operand2;
+                `OR  : ex_result = alu_operand1 | alu_operand2;
+                `AND : ex_result = alu_operand1 & alu_operand2;
                 default: ex_result = 32'h0;
             endcase
         end
