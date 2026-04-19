@@ -11,7 +11,7 @@ module decode (
 );
 
     wire [6:0] opcode = instr[6:0];
-    wire [2:0] funct3 = instr[14:12];
+    wire [6:0] funct7 = instr[31:25];
 
     always @(*) begin
         // Default control signal states (prevents latches)
@@ -21,7 +21,7 @@ module decode (
 
         // Custom Instruction Intercept
         if (opcode == `OPCODE_CUSTOM) begin
-            case(funct3)
+            case(funct7)
                 `MAC_EN:  mac_enable = 1'b1;
                 `MAC_RST: mac_reset  = 1'b1;
                 `MAC_CLS: classify   = 1'b1;
