@@ -186,7 +186,10 @@ module pipe
     );
 
     // THE WRITE-BACK MULTIPLEXER (Safe Integration)
-    assign final_wb_result = (valid_out) ? {28'd0, digit_out} : wb_result;
+    //chnaged in final fixes
+    assign final_wb_result = (mac_classify_wb && valid_out)
+                         ? {28'd0, digit_out}
+                         : wb_result;
 
     // ================================================================
     // REGISTER FILE FORWARDING
