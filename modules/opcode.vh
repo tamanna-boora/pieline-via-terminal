@@ -63,8 +63,8 @@
 // ================================================================
 `define OPCODE_CUSTOM  7'b0001011
 
-`define MAC_EN   3'b000
-`define MAC_RST  3'b001
-`define MAC_CLS  3'b010
+`define MAC_EN   7'd0
+`define MAC_RST  7'd2
+`define MAC_CLS  7'd1
 
 `endif
