@@ -318,8 +318,7 @@ module pipe
     );
 
     assign pc_out = fetch_pc;
-    assign is_mul = is_mul;           
-    assign is_div = is_div;
+
     assign mul_busy_o = cpu_stall_out;
     assign div_busy_o = cpu_stall_out;
     assign result_o = final_wb_result; // Output the MUXed result 
