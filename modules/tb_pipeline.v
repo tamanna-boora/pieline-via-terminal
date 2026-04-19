@@ -111,7 +111,7 @@ module riscv_top #(
     // =========================================================================
     instr_mem imem (
         .clk        (slow_clk),
-        .pc         (inst_mem_address),     // Changed to match 'pc'
+        .pc         (inst_mem_address[11:2]),     // Changed to match 'pc'
         .instr      (inst_mem_read_data)    // Changed to match 'instr'
     );
 
