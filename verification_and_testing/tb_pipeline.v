@@ -82,7 +82,7 @@ pipe DUT (
 ////////////////////////////////////////////////////////////
 instr_mem IMEM (
     .clk(clk),
-    .pc(inst_mem_address), 
+    .pc(inst_mem_address[11:2]), 
     .instr(inst_mem_read_data)
 );
 
