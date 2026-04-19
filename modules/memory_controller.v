@@ -1,12 +1,18 @@
+`timescale 1ns / 1ps
+
 module memory_controller (
     input wire clk,
     input wire rst_n,
 
-    // --- UART RX interface ---
+    // --- UART Interface ---
     input wire [7:0] uart_rx_data,
     input wire       rx_done,
-    
+    input wire       uart_tx_busy,
+
     // --- CPU Interface ---
+    // DESIGN CHOICE: CPU always uses address window 0x0000–0x1FFF.
+    // bank_sel transparently routes to the correct physical BRAM.
+    // Firmware must always use BANK_A_BASE (0x0000) — never BANK_B_BASE.
     input wire [31:0] cpu_addr,
     input wire [31:0] cpu_wdata,
     input wire        cpu_we,
@@ -27,28 +33,51 @@ module memory_controller (
     output reg [3:0]  ram_wstrb_b,
     input wire [31:0] ram_data_b_out,
 
-    // --- Status ---
+    // --- Status & Peripherals ---
     output reg        bank_sel,
-    output reg        uart_data_ready // Renamed for clarity: High when image is complete
+    output reg        uart_data_ready,
+    output reg [3:0]  seven_seg_val
 );
 
     reg [9:0]  pixel_count;
-    reg [31:0] cpu_addr_delayed;
-    reg [31:0] pixel_packer; 
+    reg [31:0] cpu_addr_reg;
+    reg [31:0] pixel_packer;
 
-    // --- STEP 1: Management Logic ---
+    //use latch directly in read mux — no extra register delay
+    reg uart_ready_latch;
+
+    // =========================================================
+    // 1. MANAGEMENT LOGIC
+    // =========================================================
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             pixel_count      <= 10'd0;
             bank_sel         <= 1'b0;
+            uart_ready_latch <= 1'b0;
             uart_data_ready  <= 1'b0;
-            cpu_addr_delayed <= 32'd0;
+            cpu_addr_reg     <= 32'd0;
             pixel_packer     <= 32'd0;
+            seven_seg_val    <= 4'd0;
         end else begin
-            cpu_addr_delayed <= cpu_addr;
+            cpu_addr_reg <= cpu_addr;
 
+            // MMIO write: 7-segment display
+            if (cpu_we && cpu_addr == 32'h40000010)
+                seven_seg_val <= cpu_wdata[3:0];
+
+            // clear latch on the CURRENT cpu_addr (not delayed)
+            // so it clears the same cycle the CPU reads it
+            if (rx_done && pixel_count == 10'd783)
+                uart_ready_latch <= 1'b1;
+            else if (!cpu_we && cpu_addr == 32'h40000004)
+                uart_ready_latch <= 1'b0;
+
+            // uart_data_ready is a direct copy for the output port,
+            // but the read mux uses uart_ready_latch directly
+            uart_data_ready <= uart_ready_latch;
+
+            // Pixel packing + bank swap
             if (rx_done) begin
-                // Pack 8-bit UART data into 32-bit buffer
                 case (pixel_count[1:0])
                     2'b00: pixel_packer[7:0]   <= uart_rx_data;
                     2'b01: pixel_packer[15:8]  <= uart_rx_data;
@@ -56,55 +85,53 @@ module memory_controller (
                     2'b11: pixel_packer[31:24] <= uart_rx_data;
                 endcase
 
-                // Check if the full image (784 pixels) has arrived
                 if (pixel_count == 10'd783) begin
-                    pixel_count     <= 10'd0;
-                    bank_sel        <= ~bank_sel;   // Swap banks
-                    uart_data_ready <= 1'b1;        // Tell CPU: "New Image is Ready!"
+                    pixel_count <= 10'd0;
+                    bank_sel    <= ~bank_sel;
                 end else begin
-                    pixel_count     <= pixel_count + 10'd1;
-                    // Reset ready flag while a new image is being transmitted
-                    if (pixel_count == 10'd0) uart_data_ready <= 1'b0; 
+                    pixel_count <= pixel_count + 10'd1;
                 end
             end
         end
     end
 
-    // --- STEP 2: RAM Driving ---
+    // =========================================================
+    // 2. RAM DRIVING
+    // FBoth bank_sel cases use identical cpu_addr window
+    //        (< 0x2000). Firmware must always use 0x0000 base.
+    // =========================================================
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            ram_we_a <= 1'b0; ram_we_b <= 1'b0;
-            ram_addr_a <= 0;  ram_addr_b <= 0;
+            ram_we_a    <= 1'b0;     ram_we_b    <= 1'b0;
+            ram_addr_a  <= 32'd0;    ram_addr_b  <= 32'd0;
+            ram_wdata_a <= 32'd0;    ram_wdata_b <= 32'd0;
+            ram_wstrb_a <= 4'd0;     ram_wstrb_b <= 4'd0;
         end else begin
-            // Default: no writes
-            ram_we_a <= 1'b0;
-            ram_we_b <= 1'b0;
+            // Defaults: mirror CPU bus to both (only we signals gate writes)
+            ram_we_a    <= 1'b0;       ram_we_b    <= 1'b0;
+            ram_addr_a  <= cpu_addr;   ram_addr_b  <= cpu_addr;
+            ram_wdata_a <= cpu_wdata;  ram_wdata_b <= cpu_wdata;
+            ram_wstrb_a <= cpu_wstrb;  ram_wstrb_b <= cpu_wstrb;
 
-            if (bank_sel == 0) begin
-                // CPU is doing AI math on Bank A
-                ram_addr_a  <= cpu_addr;
-                ram_wdata_a <= cpu_wdata;
-                ram_wstrb_a <= cpu_wstrb;
-                ram_we_a    <= (cpu_addr >= 32'h2000 && cpu_addr < 32'h4000) ? cpu_we : 1'b0;
+            if (bank_sel == 1'b0) begin
+                // CPU → Bank A | UART → Bank B
+                ram_we_a <= (cpu_addr < 32'h2000) ? cpu_we : 1'b0;
 
-                // UART is filling Bank B
-                if (rx_done && (pixel_count[1:0] == 2'b11)) begin
+                if (rx_done && pixel_count[1:0] == 2'b11) begin
                     ram_we_b    <= 1'b1;
-                    ram_addr_b  <= 32'h2000 + {22'b0, pixel_count[9:2], 2'b00};
+                    ram_addr_b  <= {22'b0, pixel_count[9:2], 2'b00};
                     ram_wdata_b <= {uart_rx_data, pixel_packer[23:0]};
                     ram_wstrb_b <= 4'b1111;
                 end
-            end else begin
-                // CPU is doing AI math on Bank B
-                ram_addr_b  <= cpu_addr;
-                ram_wdata_b <= cpu_wdata;
-                ram_wstrb_b <= cpu_wstrb;
-                ram_we_b    <= (cpu_addr >= 32'h2000 && cpu_addr < 32'h4000) ? cpu_we : 1'b0;
 
-                // UART is filling Bank A
-                if (rx_done && (pixel_count[1:0] == 2'b11)) begin
+            end else begin
+                // CPU → Bank B | UART → Bank A
+                // same address window — transparent to firmware
+                ram_we_b <= (cpu_addr < 32'h2000) ? cpu_we : 1'b0;
+
+                if (rx_done && pixel_count[1:0] == 2'b11) begin
                     ram_we_a    <= 1'b1;
-                    ram_addr_a  <= 32'h2000 + {22'b0, pixel_count[9:2], 2'b00};
+                    ram_addr_a  <= {22'b0, pixel_count[9:2], 2'b00};
                     ram_wdata_a <= {uart_rx_data, pixel_packer[23:0]};
                     ram_wstrb_a <= 4'b1111;
                 end
@@ -112,15 +139,28 @@ module memory_controller (
         end
     end
 
-    // --- STEP 3: Read Mux ---
+    // =========================================================
+    // 3. READ MUX
+    // use uart_ready_latch directly (no extra cycle delay)
+    // status reg cleared same cycle as read via current addr
+    // =========================================================
     always @(*) begin
         cpu_rdata = 32'h0;
-        if (cpu_addr_delayed == 32'h4000) begin
-            // Status Register: [31:2] reserved, [1] bank_sel, [0] data_ready
-            cpu_rdata = {30'b0, bank_sel, uart_data_ready};
-        end else if (cpu_addr_delayed >= 32'h2000 && cpu_addr_delayed < 32'h4000) begin
-            cpu_rdata = (bank_sel == 0) ? ram_data_a_out : ram_data_b_out;
-        end
+
+        if (cpu_addr_reg == 32'h40000004)
+           
+            cpu_rdata = {30'b0, bank_sel, uart_ready_latch};
+
+        else if (cpu_addr_reg == 32'h4000000C)
+            cpu_rdata = {31'b0, ~uart_tx_busy};
+
+        // read mux: bank_sel swaps which physical output wire is read
+        // Both cases use the 0x0000 window — matches STEP 2 addressing
+        else if (cpu_addr_reg < 32'h2000)
+            cpu_rdata = (bank_sel == 1'b0) ? ram_data_a_out : ram_data_b_out;
+
+        else if (cpu_addr_reg >= 32'h2000 && cpu_addr_reg < 32'h4000)
+            cpu_rdata = (bank_sel == 1'b0) ? ram_data_b_out : ram_data_a_out;
     end
 
 endmodule
