@@ -11,7 +11,6 @@ module pipe
     output              exception,
     output [31:0]       pc_out,
 
-    // Instruction memory interface
     input               inst_mem_is_valid,
     input  [31:0]       inst_mem_read_data,
     input  [31:0]       dmem_read_data_temp,
@@ -31,9 +30,6 @@ module pipe
     output [3:0]        dmem_write_byte
 );
 
-    // ================================================================
-    // WIRES (Data, IF/ID, Execute, WB)
-    // ================================================================
     wire [31:0] dmem_read_data;
     wire  [1:0] dmem_read_offset;
     wire        inst_mem_is_ready;
@@ -93,14 +89,33 @@ module pipe
     wire        cpu_stall_out;
 
     // ================================================================
-    // TINYML MAC ACCELERATOR WIRES
+    // MAC WIRES
     // ================================================================
     wire        mac_enable;
     wire        mac_reset;
     wire        classify;
     wire [3:0]  digit_out;
     wire        valid_out;
-    wire [31:0] final_wb_result; // Intercepts standard WB to inject MAC answer
+    wire [31:0] final_wb_result;
+
+    // Gate MAC signals — prevents multi-fire during pipeline stalls
+    wire mac_enable_gated = mac_enable && !cpu_stall_out && !stall_read;
+    wire mac_reset_gated  = mac_reset  && !cpu_stall_out && !stall_read;
+    wire classify_gated   = classify   && !cpu_stall_out && !stall_read;
+
+    // Pipeline classify to WB stage — was undeclared, caused compile error
+    reg mac_classify_ex;
+    reg mac_classify_wb;
+
+    always @(posedge clk or negedge reset) begin
+        if (!reset) begin
+            mac_classify_ex <= 1'b0;
+            mac_classify_wb <= 1'b0;
+        end else if (!stall_read) begin
+            mac_classify_ex <= classify_gated;
+            mac_classify_wb <= mac_classify_ex;
+        end
+    end
 
     // ================================================================
     // MEMORY ASSIGNMENTS
@@ -116,7 +131,7 @@ module pipe
     assign dmem_read_valid_checker = 1'b1;
 
     // ================================================================
-    // IF_ID INSTANTIATION
+    // IF_ID
     // ================================================================
     wire [31:0] id_ex_instruction;
 
@@ -134,7 +149,7 @@ module pipe
         .wb_alu_to_reg      (wb_alu_to_reg),
         .wb_mem_to_reg      (wb_mem_to_reg),
         .wb_dest_reg_sel    (wb_dest_reg_sel),
-        .wb_result          (final_wb_result), // Changed to route MUX result
+        .wb_result          (final_wb_result),
         .wb_read_data       (wb_read_data),
         .inst_mem_offset    (inst_mem_address[1:0]),
         .execute_immediate_w(execute_immediate),
@@ -156,11 +171,11 @@ module pipe
         .instruction_o      (instruction),
         .is_mul_w           (is_mul),
         .is_div_w           (is_div),
-        .id_ex_instruction_o(id_ex_instruction)  
+        .id_ex_instruction_o(id_ex_instruction)
     );
 
     // ================================================================
-    // MAC DECODER INSTANTIATION
+    // MAC DECODER
     // ================================================================
     decode decode_inst (
         .instr      (id_ex_instruction),
@@ -170,26 +185,25 @@ module pipe
     );
 
     // ================================================================
-    // MAC UNIT INSTANTIATION
+    // MAC UNIT — gated signals connected
     // ================================================================
     mnist_mac_unit mac_unit_inst (
         .clk         (clk),
-        .rst_n       (reset), 
-        .pixels      (reg_rdata1),            // 32-bit pixel bundle
-        .weight_addr (reg_rdata2[7:0]),       // Lower 8 bits of rs2
-        .neuron_id   (reg_rdata2[11:8]),      // Next 4 bits of rs2
-        .mac_enable  (mac_enable),
-        .mac_reset   (mac_reset),
-        .classify    (classify),
+        .rst_n       (reset),
+        .pixels      (reg_rdata1),
+        .weight_addr (reg_rdata2[7:0]),
+        .neuron_id   (reg_rdata2[11:8]),
+        .mac_enable  (mac_enable_gated),
+        .mac_reset   (mac_reset_gated),
+        .classify    (classify_gated),
         .digit_out   (digit_out),
         .valid_out   (valid_out)
     );
 
-    // THE WRITE-BACK MULTIPLEXER (Safe Integration)
-    //chnaged in final fixes
+    // mac_classify_wb now declared 
     assign final_wb_result = (mac_classify_wb && valid_out)
-                         ? {28'd0, digit_out}
-                         : wb_result;
+                           ? {28'd0, digit_out}
+                           : wb_result;
 
     // ================================================================
     // REGISTER FILE FORWARDING
@@ -205,7 +219,7 @@ module pipe
         (wb_mem_to_reg ? wb_read_data : final_wb_result) : regs[src2_select];
 
     // ================================================================
-    // REGISTER FILE WRITEBACK 
+    // REGISTER FILE WRITEBACK
     // ================================================================
     integer i;
     always @(posedge clk or negedge reset) begin
@@ -218,13 +232,13 @@ module pipe
                 if (wb_mem_to_reg)
                     regs[wb_dest_reg_sel] <= wb_read_data;
                 else
-                    regs[wb_dest_reg_sel] <= final_wb_result; // Routes MAC prediction
+                    regs[wb_dest_reg_sel] <= final_wb_result;
             end
         end
     end
 
     // ================================================================
-    // STALL REGISTER 
+    // STALL REGISTER
     // ================================================================
     always @(posedge clk or negedge reset) begin
         if (!reset)
@@ -234,7 +248,7 @@ module pipe
     end
 
     // ================================================================
-    // EXECUTE INSTANTIATION
+    // EXECUTE
     // ================================================================
     execute execute (
         .clk            (clk),
@@ -265,7 +279,7 @@ module pipe
         .branch_stall   (branch_stall),
         .next_pc        (next_pc),
         .branch_taken   (branch_taken),
-        .wb_result      (wb_result), 
+        .wb_result      (wb_result),
         .wb_mem_write   (wb_mem_write),
         .wb_alu_to_reg  (wb_alu_to_reg),
         .wb_dest_reg_sel(wb_dest_reg_sel),
@@ -281,7 +295,7 @@ module pipe
     );
 
     // ================================================================
-    // PC UPDATE LOGIC
+    // PC UPDATE
     // ================================================================
     always @(posedge clk or negedge reset) begin
         if (!reset)
@@ -291,7 +305,7 @@ module pipe
     end
 
     // ================================================================
-    // WB/MEM INSTANTIATION
+    // WB/MEM
     // ================================================================
     wb wb_stage (
         .clk                (clk),
@@ -320,9 +334,9 @@ module pipe
         .wb_stall_second_o  (wb_stall_second)
     );
 
-    assign pc_out = fetch_pc;
-
+    assign pc_out     = fetch_pc;
     assign mul_busy_o = cpu_stall_out;
     assign div_busy_o = cpu_stall_out;
-    assign result_o = final_wb_result; // Output the MUXed result 
+    assign result_o   = final_wb_result;
+
 endmodule
