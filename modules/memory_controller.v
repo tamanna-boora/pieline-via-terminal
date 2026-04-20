@@ -8,7 +8,8 @@ module memory_controller (
     input wire [7:0] uart_rx_data,
     input wire       rx_done,
     input wire       uart_tx_busy,
-
+    output reg [7:0] uart_tx_data_out,
+    output reg       uart_tx_start_out,
     // --- CPU Interface ---
     // DESIGN CHOICE: CPU always uses address window 0x0000–0x1FFF.
     // bank_sel transparently routes to the correct physical BRAM.
@@ -49,51 +50,57 @@ module memory_controller (
     // =========================================================
     // 1. MANAGEMENT LOGIC
     // =========================================================
-    always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            pixel_count      <= 10'd0;
-            bank_sel         <= 1'b0;
+   always @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+        pixel_count       <= 10'd0;
+        bank_sel          <= 1'b0;
+        uart_ready_latch  <= 1'b0;
+        uart_data_ready   <= 1'b0;
+        uart_tx_start_out <= 1'b0;
+        uart_tx_data_out  <= 8'd0;      // ← add this
+        cpu_addr_reg      <= 32'd0;
+        pixel_packer      <= 32'd0;
+        seven_seg_val     <= 4'd0;
+    end else begin
+        cpu_addr_reg      <= cpu_addr;
+        uart_tx_start_out <= 1'b0;      // ← default low every cycle
+
+        // MMIO write: 7-segment display
+        if (cpu_we && cpu_addr == 32'h40000010)
+            seven_seg_val <= cpu_wdata[3:0];
+
+        // MMIO write: UART TX
+        if (cpu_we && cpu_addr == 32'h40000008) begin
+            uart_tx_data_out  <= cpu_wdata[7:0];
+            uart_tx_start_out <= 1'b1;  // 1-cycle pulse
+        end
+
+        // Sticky latch
+        if (rx_done && pixel_count == 10'd783)
+            uart_ready_latch <= 1'b1;
+        else if (!cpu_we && cpu_addr == 32'h40000004)
             uart_ready_latch <= 1'b0;
-            uart_data_ready  <= 1'b0;
-            cpu_addr_reg     <= 32'd0;
-            pixel_packer     <= 32'd0;
-            seven_seg_val    <= 4'd0;
-        end else begin
-            cpu_addr_reg <= cpu_addr;
 
-            // MMIO write: 7-segment display
-            if (cpu_we && cpu_addr == 32'h40000010)
-                seven_seg_val <= cpu_wdata[3:0];
+        uart_data_ready <= uart_ready_latch;
 
-            // clear latch on the CURRENT cpu_addr (not delayed)
-            // so it clears the same cycle the CPU reads it
-            if (rx_done && pixel_count == 10'd783)
-                uart_ready_latch <= 1'b1;
-            else if (!cpu_we && cpu_addr == 32'h40000004)
-                uart_ready_latch <= 1'b0;
+        // Pixel packing + bank swap
+        if (rx_done) begin
+            case (pixel_count[1:0])
+                2'b00: pixel_packer[7:0]   <= uart_rx_data;
+                2'b01: pixel_packer[15:8]  <= uart_rx_data;
+                2'b10: pixel_packer[23:16] <= uart_rx_data;
+                2'b11: pixel_packer[31:24] <= uart_rx_data;
+            endcase
 
-            // uart_data_ready is a direct copy for the output port,
-            // but the read mux uses uart_ready_latch directly
-            uart_data_ready <= uart_ready_latch;
-
-            // Pixel packing + bank swap
-            if (rx_done) begin
-                case (pixel_count[1:0])
-                    2'b00: pixel_packer[7:0]   <= uart_rx_data;
-                    2'b01: pixel_packer[15:8]  <= uart_rx_data;
-                    2'b10: pixel_packer[23:16] <= uart_rx_data;
-                    2'b11: pixel_packer[31:24] <= uart_rx_data;
-                endcase
-
-                if (pixel_count == 10'd783) begin
-                    pixel_count <= 10'd0;
-                    bank_sel    <= ~bank_sel;
-                end else begin
-                    pixel_count <= pixel_count + 10'd1;
-                end
+            if (pixel_count == 10'd783) begin
+                pixel_count <= 10'd0;
+                bank_sel    <= ~bank_sel;
+            end else begin
+                pixel_count <= pixel_count + 10'd1;
             end
         end
     end
+end
 
     // =========================================================
     // 2. RAM DRIVING
