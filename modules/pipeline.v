@@ -11,6 +11,7 @@ module pipe
     output              exception,
     output [31:0]       pc_out,
 
+    // Instruction memory interface
     input               inst_mem_is_valid,
     input  [31:0]       inst_mem_read_data,
     input  [31:0]       dmem_read_data_temp,
@@ -27,7 +28,10 @@ module pipe
     output              dmem_write_ready,
     output [31:0]       dmem_write_address,
     output [31:0]       dmem_write_data,
-    output [3:0]        dmem_write_byte
+    output [3:0]        dmem_write_byte,
+
+    //  expose mac_done for top.v → memory_controller MMIO
+    output wire         mac_done_o
 );
 
     wire [31:0] dmem_read_data;
@@ -96,14 +100,17 @@ module pipe
     wire        classify;
     wire [3:0]  digit_out;
     wire        valid_out;
+    wire        mac_done;       // pipeline drain signal from MAC unit
     wire [31:0] final_wb_result;
 
     // Gate MAC signals — prevents multi-fire during pipeline stalls
+    // mac_done added to classify_gated — double interlock with safe_classify
     wire mac_enable_gated = mac_enable && !cpu_stall_out && !stall_read;
     wire mac_reset_gated  = mac_reset  && !cpu_stall_out && !stall_read;
-    wire classify_gated   = classify   && !cpu_stall_out && !stall_read;
+    wire classify_gated   = classify   && !cpu_stall_out && !stall_read && mac_done;
 
-    // Pipeline classify to WB stage — was undeclared, caused compile error
+    // Pipeline classify to WB stage
+    // mac_classify_wb is single-cycle pulse — safe with sticky valid_out
     reg mac_classify_ex;
     reg mac_classify_wb;
 
@@ -116,6 +123,9 @@ module pipe
             mac_classify_wb <= mac_classify_ex;
         end
     end
+
+    // Expose mac_done to top.v for MMIO mapping at 0x40000014
+    assign mac_done_o = mac_done;
 
     // ================================================================
     // MEMORY ASSIGNMENTS
@@ -185,7 +195,7 @@ module pipe
     );
 
     // ================================================================
-    // MAC UNIT — gated signals connected
+    // MAC UNIT
     // ================================================================
     mnist_mac_unit mac_unit_inst (
         .clk         (clk),
@@ -197,10 +207,11 @@ module pipe
         .mac_reset   (mac_reset_gated),
         .classify    (classify_gated),
         .digit_out   (digit_out),
-        .valid_out   (valid_out)
+        .valid_out   (valid_out),
+        .mac_done    (mac_done)
     );
 
-    // mac_classify_wb now declared 
+    // mac_classify_wb is single-cycle pulse — safe with sticky valid_out
     assign final_wb_result = (mac_classify_wb && valid_out)
                            ? {28'd0, digit_out}
                            : wb_result;
