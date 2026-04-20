@@ -153,7 +153,9 @@ id_ex_reg u_id_ex (
 
     .alu_i(
         (instruction_i[`OPCODE] == `ARITHI) ||
-        (instruction_i[`OPCODE] == `ARITHR && !is_m_ext)
+        (instruction_i[`OPCODE] == `ARITHR && !is_m_ext) ||
+        (instruction_i[`OPCODE] == `OPCODE_CUSTOM &&
+         instruction_i[31:25] == `MAC_CLS) 
     ),
 
     .lui_i       (instruction_i[`OPCODE] == `LUI),
