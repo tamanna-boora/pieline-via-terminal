@@ -123,10 +123,10 @@ module mnist_mac_unit (
             prod2_s2 <= 17'sd0; prod3_s2 <= 17'sd0;
             neuron_s2 <= 4'd0;
         end else if (en_s1) begin
-            prod0_s2 <= w0_s1 * $signed({1'b0, p0_s1});
-            prod1_s2 <= w1_s1 * $signed({1'b0, p1_s1});
-            prod2_s2 <= w2_s1 * $signed({1'b0, p2_s1});
-            prod3_s2 <= w3_s1 * $signed({1'b0, p3_s1});
+           prod0_s2 <= $signed(w0_s1) * $signed({1'b0, p0_s1});
+prod1_s2 <= $signed(w1_s1) * $signed({1'b0, p1_s1});
+prod2_s2 <= $signed(w2_s1) * $signed({1'b0, p2_s1});
+prod3_s2 <= $signed(w3_s1) * $signed({1'b0, p3_s1});
             neuron_s2 <= neuron_s1;
         end
     end
@@ -234,5 +234,22 @@ module mnist_mac_unit (
     assign digit_out = digit_out_reg;
     assign valid_out = valid_out_reg;
     assign mac_done  = mac_done_reg;
+// Paste this at the bottom of mnist_mac_unit.v
+    always @(posedge clk) begin
+        if (safe_classify) begin
+            $display("--- FPGA ACCUMULATORS ---");
+            $display("  neuron[0] = %0d", $signed(accumulator[0]));
+            $display("  neuron[1] = %0d", $signed(accumulator[1]));
+            $display("  neuron[2] = %0d", $signed(accumulator[2]));
+            $display("  neuron[3] = %0d", $signed(accumulator[3]));
+            $display("  neuron[4] = %0d", $signed(accumulator[4]));
+            $display("  neuron[5] = %0d", $signed(accumulator[5]));
+            $display("  neuron[6] = %0d", $signed(accumulator[6]));
+            $display("  neuron[7] = %0d", $signed(accumulator[7]));
+            $display("  neuron[8] = %0d", $signed(accumulator[8]));
+            $display("  neuron[9] = %0d", $signed(accumulator[9]));
+        end
+    end
 
+ // End of mnist_mac_unit
 endmodule
