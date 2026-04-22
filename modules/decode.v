@@ -29,4 +29,9 @@ module decode (
             endcase
         end
     end
+    always @(posedge instr) begin
+        if (opcode == 7'h0B) begin
+            $display("TB DEBUG: CPU hit Custom Instruction! funct7 = %d", funct7);
+        end
+    end
 endmodule
