@@ -94,7 +94,7 @@ always @(posedge clk or negedge reset) begin
     else if (!stall_read_i && mem_write_i) begin
         wb_write_address_o <= write_address_i;
         case (alu_operation_i)
-            SB: begin
+            `SB: begin
                 wb_write_data_o <= {4{alu_operand2_i[7:0]}};
                 case (write_address_i[1:0])
                     2'b00:  wb_write_byte_o <= 4'b0001;
@@ -103,11 +103,11 @@ always @(posedge clk or negedge reset) begin
                     default:wb_write_byte_o <= 4'b1000;
                 endcase
             end
-            SH: begin
+            `SH: begin
                 wb_write_data_o <= {2{alu_operand2_i[15:0]}};
                 wb_write_byte_o <= write_address_i[1] ? 4'b1100 : 4'b0011;
             end
-            SW: begin
+            `SW: begin
                 wb_write_data_o <= alu_operand2_i;
                 wb_write_byte_o <= 4'b1111;
             end
@@ -127,22 +127,22 @@ end
 wire [31:0] wb_read_data_next;
 
 assign wb_read_data_next = 
-    (wb_alu_operation_i == LB) ? (
+    (wb_alu_operation_i == `LB) ? (
         wb_read_address_i == 2'b00 ? {{24{dmem_read_data_i[7]}},  dmem_read_data_i[7:0]} :
         wb_read_address_i == 2'b01 ? {{24{dmem_read_data_i[15]}}, dmem_read_data_i[15:8]} :
         wb_read_address_i == 2'b10 ? {{24{dmem_read_data_i[23]}}, dmem_read_data_i[23:16]} :
         {{24{dmem_read_data_i[31]}}, dmem_read_data_i[31:24]}
-    ) : (wb_alu_operation_i == LH) ? (
+    ) : (wb_alu_operation_i == `LH) ? (
         wb_read_address_i[1] ? {{16{dmem_read_data_i[31]}}, dmem_read_data_i[31:16]} :
         {{16{dmem_read_data_i[15]}}, dmem_read_data_i[15:0]}
-    ) : (wb_alu_operation_i == LW) ? (
+    ) : (wb_alu_operation_i == `LW) ? (
         dmem_read_data_i
-    ) : (wb_alu_operation_i == LBU) ? (
+    ) : (wb_alu_operation_i == `LBU) ? (
         wb_read_address_i == 2'b00 ? {24'h0, dmem_read_data_i[7:0]} :
         wb_read_address_i == 2'b01 ? {24'h0, dmem_read_data_i[15:8]} :
         wb_read_address_i == 2'b10 ? {24'h0, dmem_read_data_i[23:16]} :
         {24'h0, dmem_read_data_i[31:24]}
-    ) : (wb_alu_operation_i == LHU) ? (
+    ) : (wb_alu_operation_i == `LHU) ? (
         wb_read_address_i[1] ? {16'h0, dmem_read_data_i[31:16]} :
         {16'h0, dmem_read_data_i[15:0]}
     ) : 32'h0;
