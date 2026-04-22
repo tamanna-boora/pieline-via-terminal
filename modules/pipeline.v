@@ -32,6 +32,7 @@ module pipe
 
     //  expose mac_done for top.v → memory_controller MMIO
     output wire         mac_done_o
+     output wire         valid_out_o 
 );
 
     wire [31:0] dmem_read_data;
@@ -126,6 +127,7 @@ module pipe
 
     // Expose mac_done to top.v for MMIO mapping at 0x40000014
     assign mac_done_o = mac_done;
+    assign valid_out_o = valid_out;
 
     // ================================================================
     // MEMORY ASSIGNMENTS
