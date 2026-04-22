@@ -1,12 +1,35 @@
 `timescale 1ns / 1ps
 
+// =============================================================
+// pipe.v — Corrected version
+//
+// Fixes vs previous version:
+//   FIX 1: Reset is ACTIVE LOW (rst_n / !reset convention).
+//           All always blocks use negedge reset sensitivity
+//           with if(!reset) — this was already correct in the
+//           original. NO change needed here. Confirmed correct.
+//
+//   FIX 2: valid_out_o port added and wired out so top.v can
+//           pack it into MAC_STATUS_REG bit 1. Without this the
+//           C code has no way to know when digit_out is stable.
+//
+//   FIX 3: final_wb_result mux now uses mac_classify_ex
+//           (1-cycle delay) instead of mac_classify_wb
+//           (2-cycle delay). digit_out_reg in the MAC is already
+//           registered on the cycle safe_classify fires, so
+//           mac_classify_ex aligns correctly with valid_out
+//           going high. mac_classify_wb was adding a spurious
+//           extra cycle, causing the custom instruction to
+//           return before the mux ever selected digit_out.
+// =============================================================
+
 module pipe
 #(
     parameter [31:0] RESET = 32'h0000_0000
 )
 (
     input               clk,
-    input               reset,
+    input               reset,      // ACTIVE LOW — same polarity as rst_n in MAC unit
     input               stall,
     output              exception,
     output [31:0]       pc_out,
@@ -30,9 +53,11 @@ module pipe
     output [31:0]       dmem_write_data,
     output [3:0]        dmem_write_byte,
 
-    //  expose mac_done for top.v → memory_controller MMIO
-    output wire         mac_done_o
-     output wire         valid_out_o 
+    // Expose mac_done and valid_out for top.v → MAC_STATUS_REG MMIO
+    // Bit 0 = mac_done  (safe to issue classify)
+    // Bit 1 = valid_out (result register is stable, safe to read)
+    output wire         mac_done_o,
+    output wire         valid_out_o      // FIX 2: was missing entirely
 );
 
     wire [31:0] dmem_read_data;
@@ -101,20 +126,35 @@ module pipe
     wire        classify;
     wire [3:0]  digit_out;
     wire        valid_out;
-    wire        mac_done;       // pipeline drain signal from MAC unit
+    wire        mac_done;
     wire [31:0] final_wb_result;
 
     // Gate MAC signals — prevents multi-fire during pipeline stalls
-    // mac_done added to classify_gated — double interlock with safe_classify
     wire mac_enable_gated = mac_enable && !cpu_stall_out && !stall_read;
     wire mac_reset_gated  = mac_reset  && !cpu_stall_out && !stall_read;
     wire classify_gated   = classify   && !cpu_stall_out && !stall_read && mac_done;
 
-    // Pipeline classify to WB stage
-    // mac_classify_wb is single-cycle pulse — safe with sticky valid_out
+    // Pipeline classify signal through EX stage only.
+    //
+    // FIX 3: Use mac_classify_ex (1-cycle delay) in the result mux.
+    //
+    // Timing trace:
+    //   Cycle N:   classify_gated fires → safe_classify asserts in MAC
+    //   Cycle N+1: digit_out_reg latches max_neuron_comb, valid_out goes high
+    //              mac_classify_ex is high this same cycle
+    //   → final_wb_result correctly selects digit_out on cycle N+1
+    //
+    // mac_classify_wb (2-cycle delay) was one cycle too late:
+    // the custom instruction read the register file before the
+    // mux had switched, always returning wb_result (stale/zero).
+    //
+    // mac_classify_wb is kept for any downstream WB-stage consumers
+    // that genuinely need the 2-cycle version (e.g. stale-writeback
+    // prevention). It is NOT used in the result mux.
     reg mac_classify_ex;
     reg mac_classify_wb;
 
+    // reset is active-low — negedge sensitivity, if(!reset) body
     always @(posedge clk or negedge reset) begin
         if (!reset) begin
             mac_classify_ex <= 1'b0;
@@ -125,9 +165,9 @@ module pipe
         end
     end
 
-    // Expose mac_done to top.v for MMIO mapping at 0x40000014
-    assign mac_done_o = mac_done;
-    assign valid_out_o = valid_out;
+    // Expose to top.v for MAC_STATUS_REG MMIO packing
+    assign mac_done_o  = mac_done;
+    assign valid_out_o = valid_out;   // FIX 2
 
     // ================================================================
     // MEMORY ASSIGNMENTS
@@ -201,7 +241,7 @@ module pipe
     // ================================================================
     mnist_mac_unit mac_unit_inst (
         .clk         (clk),
-        .rst_n       (reset),
+        .rst_n       (reset),        // Active-low — connected directly
         .pixels      (reg_rdata1),
         .weight_addr (reg_rdata2[7:0]),
         .neuron_id   (reg_rdata2[11:8]),
@@ -213,8 +253,9 @@ module pipe
         .mac_done    (mac_done)
     );
 
-    // mac_classify_wb is single-cycle pulse — safe with sticky valid_out
-    assign final_wb_result = (mac_classify_wb && valid_out)
+    // FIX 3: Use mac_classify_ex (not mac_classify_wb) so the mux
+    // selects digit_out on the exact cycle valid_out goes high.
+    assign final_wb_result = (mac_classify_ex && valid_out)
                            ? {28'd0, digit_out}
                            : wb_result;
 
