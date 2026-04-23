@@ -277,7 +277,7 @@ module bram_bank (
     input  wire [9:0]  addr,   
     input  wire [31:0] wdata,
     input  wire [3:0]  wstrb,
-    output wire [31:0] rdata  // CHANGED: Must be a wire for instant read
+    output wire [31:0] rdata  
 );
     
     reg [31:0] ram [0:1023]; 
