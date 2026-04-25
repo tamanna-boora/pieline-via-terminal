@@ -1,8 +1,7 @@
 `timescale 1ns / 1ps
 
-// =============================================================
-// mnist_mac_unit.v — Final verified version
-//
+
+
 // Fixes applied vs v3:
 //   FIX 1: Explicit 11-bit rom_index prevents synthesis
 //           truncation on the neuron*196 multiply.
@@ -14,7 +13,7 @@
 //   - signed arithmetic (sign extension is automatic)
 //   - valid_out sticky hold (correct for memory-mapped result)
 //   - All stage resets on !rst_n || mac_reset
-// =============================================================
+
 
 (* use_dsp = "yes" *)
 module mnist_mac_unit (
