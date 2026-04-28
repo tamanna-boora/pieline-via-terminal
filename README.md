@@ -6,7 +6,7 @@ The system is designed to classify handwritten digits (MNIST) in real-time by re
 
 **Target Board:** ARTIX Nexys A7 (100MHz)
 
-\---
+
 
 ## Architecture
 
@@ -18,7 +18,7 @@ The system is designed to classify handwritten digits (MNIST) in real-time by re
 * **Ping-pong BRAM** — overlaps image loading with active inference
 * **100 MHz** clock on Artix-7
 
-\---
+
 
 ## Key Numbers
 
@@ -31,7 +31,7 @@ The system is designed to classify handwritten digits (MNIST) in real-time by re
 |LUTs used|5,047|
 |DSP slices|11|
 
-\---
+
 
 ## Prerequisites
 
@@ -42,7 +42,7 @@ The system is designed to classify handwritten digits (MNIST) in real-time by re
    * Python Packages: `pyserial`, `tensorflow` (for the MNIST dataset), `numpy`, `Pillow`
    * Install via: `python -m pip install pyserial tensorflow numpy Pillow`
 
-\---
+
 
 ## Repository Structure
 
@@ -72,7 +72,7 @@ Before synthesizing the hardware, you must compile the C code into machine code 
 
 3. This will generate `imem.hex` (Instruction Memory) and `dmem.hex` (Data Memory). **Ensure these files are in your Vivado project directory or updated in your `$readmemh` paths.**
 
-\---
+
 
 ## Step 2: Synthesize the FPGA Hardware
 
@@ -87,7 +87,7 @@ Before synthesizing the hardware, you must compile the C code into machine code 
 4. Click **Run Synthesis** -> **Run Implementation** -> **Generate Bitstream**.
 5. Open the **Hardware Manager**, connect your Nexys A7 board via USB, and click **Program Device**.
 
-\---
+
 
 ## Step 3: Run AI Inference (Hardware in the Loop)
 
@@ -115,7 +115,7 @@ Once the FPGA is programmed, the RISC-V CPU will boot, initialize its stack poin
         python demo_slowed.py
 ```
 
-\---
+
 
 ## Physical Dashboard (LED Indicators)
 
@@ -130,7 +130,7 @@ The Nexys A7 LEDs act as a real-time diagnostic dashboard for the SoC pipeline:
 |**LED\[9:0]**|Program Counter|Shows the current execution address. Appears as a steady glow during fast loops.|
 |**7-Segment**|Final Output|Instantly displays the neural network's final predicted digit (0-9).|
 
-\---
+
 
 ## Team — Group 25, IIT Guwahati
 
@@ -146,7 +146,7 @@ The Nexys A7 LEDs act as a real-time diagnostic dashboard for the SoC pipeline:
 
 **Report:** [Report Link](https://drive.google.com/file/d/1E0w1jG3USOAAl6f7Ml8rW8RyE_TJ82_e/view?usp=drive_link)
 
-\---
+
 
 *CS224 — Hardware Lab · IIT Guwahati · April 2026*
 
