@@ -56,7 +56,7 @@ firmware/     → Bare-metal C inference driver
 scripts/      → Python host scripts (send image, export weights)
 ```
 
-\---
+
 
 ## Step 1: Compile the Firmware
 
