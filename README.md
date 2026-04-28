@@ -49,7 +49,7 @@ The system is designed to classify handwritten digits (MNIST) in real-time by re
 ```
 rtl/          → Verilog source files (pipeline, ALU, MUL, DIV, MAC)
 peripheral/   → UART RX/TX, memory controller
-sim/          → Testbench (tb\\\_pipeline.v)
+sim/          → Testbench (tb_pipeline.v)
 constraints/  → Nexys A7 XDC pin mapping
 mem/          → imem.hex, quantized weights
 firmware/     → Bare-metal C inference driver
@@ -78,10 +78,10 @@ Before synthesizing the hardware, you must compile the C code into machine code 
 
 1. Open Vivado and create/open your project.
 2. **Add Sources:** Add all Verilog (`.v`) files, the constraints (`.xdc`) file, and the `.hex` / `.mem` files (weights and compiled firmware).
-3. **Critical Parameter:** Open `riscv\_top.v` and ensure the simulation mode parameter is set for physical hardware (enables the 50MHz clock divider and correct UART baud rate math):
+3. **Critical Parameter:** Open `riscv_top.v` and ensure the simulation mode parameter is set for physical hardware (enables the 50MHz clock divider and correct UART baud rate math):
 
 &#x20;   ```verilog
-    parameter SIM\_MODE = 1;
+    parameter SIM_MODE = 1;
     ```
 
 4. Click **Run Synthesis** -> **Run Implementation** -> **Generate Bitstream**.
@@ -94,26 +94,26 @@ Before synthesizing the hardware, you must compile the C code into machine code 
 Once the FPGA is programmed, the RISC-V CPU will boot, initialize its stack pointer, and wait in a polling loop for UART data.
 
 1. **Reset the CPU:** Press the Center Button (`BTNC`) on the Nexys A7 board to firmly reset the system.
-2. **Find your COM Port:** Open Windows Device Manager (or run `ls /dev/ttyUSB\*` on Linux) to find your board's serial port (e.g., `COM5`). Update the `COM\_PORT` variable in the Python scripts.
+2. **Find your COM Port:** Open Windows Device Manager (or run `ls /dev/ttyUSB\*` on Linux) to find your board's serial port (e.g., `COM5`). Update the `COM_PORT` variable in the Python scripts.
 3. **Run a Host Script:** Open your Python virtual environment and run one of the provided scripts:
 
    * **Single Inference:** Sends a single user-selected digit.
 
 ```bash
-        python send\_to\_fpga.py
-        ```
+        python send_to_fpga.py
+```
 
    * **Continuous Stress Test (Firehose):** Tests the Ping-Pong buffering by streaming multiple images back-to-back at 1 Mbps with zero delay.
 
 ```bash
-        python test\_ping\_pong.py
-        ```
+        python test_ping_pong.py
+```
 
    * **Human-Visible Demo:** Sends images but pauses for 1.5 seconds between each so you can read the 7-segment display.
 
 ```bash
-        python demo\_slowed.py
-        ```
+        python demo_slowed.py
+```
 
 \---
 
